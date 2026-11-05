@@ -54,3 +54,7 @@ All paths in the site are relative, so it works under the `/cv-studio/` sub-path
   - change **line**, **bullet/paragraph**, **entry** and **section** spacing with the sliders; the layout is rebuilt so every gap of the same kind stays equal, and a new page is added automatically if content no longer fits.
   Headings and entries are found from their wording, dates and spacing; if one is missed, hover its line and press **H** (heading) or **E** (first line of an entry). Rules, boxes and images printed in the original PDF stay where they were.
 - **Save as PDF** produces an image-based PDF. For applications that read CVs automatically, use **Save as HTML**, open the file and print to PDF so the text stays selectable.
+
+## Highlights and colour blocks (imported PDFs)
+
+Filled rectangles, thin rules and highlight annotations are detected when you import a PDF. Hover or tap one on the page (or use the "Highlights and colours" list in the sidebar) to change its colour, drag it, resize it or delete it. Deleted shapes can be restored from the list, and Undo covers every change. Only straight, axis-aligned rectangles are detected, so curves, gradients and images stay part of the page background.
