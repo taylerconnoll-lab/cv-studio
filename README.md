@@ -25,7 +25,7 @@ Then open <http://localhost:8000>. Opening `index.html` directly from disk also 
 
 ## Deploy to GitHub Pages
 
-A workflow is included at `.github/workflows/pages.yml`.
+The site is plain static files, so Pages can serve the `main` branch directly.
 
 1. Create a new empty repository on GitHub, for example `cv-studio`.
 2. Push this folder to it:
@@ -33,8 +33,8 @@ A workflow is included at `.github/workflows/pages.yml`.
    git remote add origin https://github.com/<you>/cv-studio.git
    git push -u origin main
    ```
-3. In the repository, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
-4. The workflow runs on every push to `main`. The site appears at `https://<you>.github.io/cv-studio/`.
+3. In the repository, go to **Settings → Pages**, set **Source** to **Deploy from a branch**, choose branch `main` and folder `/ (root)`, and save.
+4. After a minute the site appears at `https://<you>.github.io/cv-studio/`. Every push to `main` redeploys it.
 
 All paths in the site are relative, so it works under the `/cv-studio/` sub-path.
 
