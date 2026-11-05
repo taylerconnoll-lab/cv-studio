@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CV Studio</title>
+<meta name="description" content="CV Studio: pick a CV type, edit directly on the page, restyle fonts and colours, and save as PDF, HTML or a draft. Runs entirely in your browser.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="gfonts" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Lato:wght@400;700&family=Open+Sans:wght@400;700&family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Raleway:wght@400;700&family=Oswald:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Source+Serif+4:wght@400;700&family=Libre+Baskerville:wght@400;700&family=EB+Garamond:wght@400;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="panel" aria-label="CV controls">
+    <div class="brand">CV Studio<small>Pick a CV type, edit on the sheet, save as PDF.</small></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-type" aria-selected="true" data-tab="type">Type</button>
+      <button role="tab" id="t-style" aria-selected="false" data-tab="style">Style</button>
+      <button role="tab" id="t-sec" aria-selected="false" data-tab="sec">Sections</button>
+    </div>
+    <div class="pane" id="p-type" role="tabpanel">
+      <span class="lbl">CV type</span>
+      <div class="types" id="types"></div>
+      <p class="hint" style="margin:12px 0 0">Switching type rearranges sections and keeps what you have written.</p>
+    </div>
+    <div class="pane" id="p-style" role="tabpanel" hidden>
+      <span class="lbl">Page layout</span>
+      <div class="seg" id="s-layout">
+        <button data-v="one">One column</button><button data-v="left">Sidebar left</button><button data-v="right">Sidebar right</button>
+      </div>
+      <span class="lbl">Header</span>
+      <div class="seg" id="s-hdr">
+        <button data-v="classic">Left</button><button data-v="centre">Centred</button><button data-v="banner">Banner</button>
+      </div>
+      <span class="lbl">Section headings</span>
+      <div class="seg" id="s-hs">
+        <button data-v="caps">Caps</button><button data-v="rule">Underline</button><button data-v="bar">Bar</button><button data-v="plain">Plain</button>
+      </div>
+      <span class="lbl">Accent colour</span>
+      <div class="sw" id="sw-accent"></div>
+      <span class="lbl">Sidebar colour</span>
+      <div class="sw" id="sw-side"></div>
+      <span class="lbl">Text colour</span>
+      <div class="sw" id="sw-text"></div>
+      <span class="lbl">Fonts</span>
+      <div class="field"><label for="f-head">Headings</label><select id="f-head"></select></div>
+      <div class="field"><label for="f-body">Body text</label><select id="f-body"></select></div>
+      <span class="lbl">Spacing</span>
+      <div class="field"><label for="r-size">Text size</label><output id="o-size"></output><input type="range" id="r-size" min="8.5" max="13" step=".5"></div>
+      <div class="field"><label for="r-lh">Line spacing</label><output id="o-lh"></output><input type="range" id="r-lh" min="1.1" max="1.9" step=".05"></div>
+      <div class="field"><label for="r-gap">Space between sections</label><output id="o-gap"></output><input type="range" id="r-gap" min="6" max="36" step="2"></div>
+      <div class="field"><label for="r-pad">Page margins</label><output id="o-pad"></output><input type="range" id="r-pad" min="20" max="64" step="2"></div>
+    </div>
+    <div class="pane" id="p-sec" role="tabpanel" hidden>
+      <span class="lbl">On this CV</span>
+      <div id="seclist"></div>
+      <span class="lbl">Add a section</span>
+      <div class="chips" id="addlist"></div>
+      <div id="removedwrap" hidden>
+        <span class="lbl">Removed sections</span>
+        <div class="chips" id="removed"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn pri" id="b-pdf">Save as PDF</button>
+      <button class="btn" id="b-html">Save as HTML</button>
+      <button class="btn" id="b-json">Save draft</button>
+      <button class="btn" id="b-open" style="grid-column:1/-1">Open a saved draft</button>
+      <input type="file" id="f-open" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+  <main class="canvas">
+    <div class="tb" id="tb" role="toolbar" aria-label="Text formatting">
+      <select id="fFont" aria-label="Font for selected text"><option value="">Font</option></select>
+      <select id="fSize" aria-label="Size for selected text"><option value="">Size</option></select>
+      <span class="sep"></span>
+      <button data-cmd="bold" title="Bold" aria-label="Bold"><b>B</b></button>
+      <button data-cmd="italic" title="Italic" aria-label="Italic"><i>I</i></button>
+      <button data-cmd="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+      <label class="clr" title="Text colour"><input type="color" id="fColor" value="#1f4f82" aria-label="Colour for selected text"><span>Colour</span></label>
+      <span class="sep"></span>
+      <button data-cmd="insertUnorderedList" title="Bullet list" aria-label="Bullet list"><svg width="16" height="14" viewBox="0 0 16 14" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="7" r="1.5"/><circle cx="2" cy="12" r="1.5"/><rect x="6" y="1" width="10" height="2"/><rect x="6" y="6" width="10" height="2"/><rect x="6" y="11" width="10" height="2"/></svg></button>
+      <button data-cmd="justifyLeft" title="Align left" aria-label="Align left"><svg width="16" height="14" viewBox="0 0 16 14" fill="currentColor"><rect y="1" width="16" height="2"/><rect y="5" width="10" height="2"/><rect y="9" width="16" height="2"/></svg></button>
+      <button data-cmd="justifyCenter" title="Centre" aria-label="Centre"><svg width="16" height="14" viewBox="0 0 16 14" fill="currentColor"><rect y="1" width="16" height="2"/><rect x="3" y="5" width="10" height="2"/><rect y="9" width="16" height="2"/></svg></button>
+      <button data-cmd="justifyRight" title="Align right" aria-label="Align right"><svg width="16" height="14" viewBox="0 0 16 14" fill="currentColor"><rect y="1" width="16" height="2"/><rect x="6" y="5" width="10" height="2"/><rect y="9" width="16" height="2"/></svg></button>
+      <span class="sep"></span>
+      <button data-cmd="removeFormat" title="Clear formatting">Clear</button>
+      <button data-cmd="undo" title="Undo">Undo</button>
+      <button data-cmd="redo" title="Redo">Redo</button>
+      <span class="hint">Click any text to edit. With nothing selected, changes apply to the whole block.</span>
+    </div>
+    <div class="stage" id="stage">
+      <div class="paper" id="paper"></div>
+      <div class="guides no-export" id="guides"></div>
+    </div>
+    <p class="foot">Your draft is kept in this browser. Save draft keeps a copy as a file. The PDF is a picture of the sheet; for applications that read CVs automatically, use Save as HTML, open it and print to PDF so the text stays selectable.</p>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

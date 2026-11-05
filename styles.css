@@ -1,0 +1,103 @@
+/* CV Studio UI. The CV sheet's own styles live in app.js (CV_CSS) so the HTML export can embed them. */
+:root{
+  color-scheme:light dark;
+  --bg:#e9ecf0; --panel:#ffffff; --ink:#1b2430; --muted:#5b6674; --line:#d6dbe2;
+  --accent:#0f6b5e; --accent-ink:#ffffff; --desk:#d9dee5; --paper:#ffffff; --soft:#f1f3f6;
+  --ui:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12161b; --panel:#1b2128; --ink:#e6eaef; --muted:#9aa5b3; --line:#2d3640;
+  --accent:#4fc3ad; --accent-ink:#0c1a17; --desk:#0d1013; --soft:#232b34;}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.4;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--panel)}
+img{max-width:100%}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-columns:330px minmax(0,1fr);height:100%;padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+.panel{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column;min-height:0}
+.brand{padding:16px 18px 6px;font-weight:700;font-size:18px;letter-spacing:.01em}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.tabs{display:flex;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:8px 4px;color:var(--muted);font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{padding:14px 18px 8px;flex:1}
+.lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 7px}
+.lbl:first-child{margin-top:0}
+.types{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.type{text-align:left;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+.type b{display:block;font-size:13px}
+.type span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.3}
+.type[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:70px;background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:7px 6px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.sw{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.sw button{width:26px;height:26px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line);padding:0}
+.sw button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+.sw input[type=color]{width:30px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px;background:none}
+.field{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin-bottom:9px;font-size:13px}
+.field select{grid-column:1/-1;background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:7px 8px}
+.field input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.field output{color:var(--muted);font-variant-numeric:tabular-nums}
+.secrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:6px}
+.secrow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.secrow .n em{font-style:normal;font-size:10.5px;color:var(--muted);margin-left:6px;text-transform:uppercase;letter-spacing:.06em}
+.mini{display:flex;gap:3px}
+.mini button,.chip{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:28px;height:28px;padding:0 7px;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{height:auto;padding:5px 9px}
+.chip:hover,.mini button:hover{border-color:var(--accent)}
+.actions{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-weight:500}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);grid-column:1/-1;font-weight:700}
+.btn:disabled{opacity:.6;cursor:wait}
+.canvas{overflow:auto;min-width:0;background:var(--desk);padding-bottom:40px}
+.tb{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel);border-bottom:1px solid var(--line);padding:8px max(14px,env(safe-area-inset-left,0px))}
+.tb select{background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:6px 6px;max-width:150px}
+.tb button{background:var(--soft);border:1px solid var(--line);border-radius:7px;min-width:34px;height:32px;padding:0 8px}
+.tb button:hover{border-color:var(--accent)}
+.tb .sep{width:1px;height:22px;background:var(--line);margin:0 2px}
+.tb .clr{position:relative;display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:7px;height:32px;padding:0 6px;background:var(--soft)}
+.tb .clr input{width:22px;height:22px;padding:0;border:0;background:none}
+.tb svg{display:block}
+.hint{color:var(--muted);font-size:12px;margin-left:auto}
+.stage{margin:22px auto 0;position:relative;width:calc(794px*var(--s,1))}
+.guides{position:absolute;inset:0;pointer-events:none}
+.guides i{position:absolute;left:0;right:0;border-top:2px dashed #e0457b;opacity:.7}
+.guides i::after{content:"Page break";position:absolute;right:4px;top:2px;font:10px var(--ui);color:#e0457b;font-style:normal}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:13px;z-index:40;max-width:90vw}
+.foot{color:var(--muted);font-size:12px;text-align:center;margin:18px 16px 0}
+
+/* default CV variables (app.js overrides them per CV) */
+.paper{--cv-accent:#1f4f82;--cv-text:#1f2328;--cv-side:#f1f3f6;--cv-side-text:#1f2328;--cv-hd-text:#fff;--cv-head:'Lato',sans-serif;--cv-body:'Lato',sans-serif;--cv-size:10.5pt;--cv-lh:1.45;--cv-gap:16px;--cv-pad:40px}
+
+/* editing chrome, excluded from exports */
+.paper [contenteditable]:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.paper [contenteditable]:focus{background:color-mix(in srgb,var(--accent) 11%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent);border-radius:2px}
+.sec-ctl{display:none;position:absolute;right:0;top:-17px;gap:2px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:2px;z-index:6;font:12px var(--ui);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.sec:hover>.sec-ctl,.sec:focus-within>.sec-ctl{display:flex}
+.sec-ctl button{background:none;border:0;min-width:26px;height:24px;border-radius:5px;padding:0 5px;color:inherit;font:inherit;line-height:1}
+.sec-ctl button:hover{background:var(--soft)}
+.sec-ctl .hdl{cursor:grab}
+.sec.dragging{opacity:.35}
+.drop-line{height:4px;background:var(--accent);border-radius:2px;margin:-2px 0 10px}
+
+/* phones and narrow windows */
+@media (max-width:900px){
+  .app{display:block;height:auto}
+  .panel{border-right:0;border-bottom:1px solid var(--line);max-height:none}
+  .pane{padding-bottom:14px}
+  .actions{position:static}
+  .canvas{overflow-x:hidden;overflow-y:visible;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .tb{margin-left:calc(-1*max(16px,env(safe-area-inset-left,0px)));margin-right:calc(-1*max(16px,env(safe-area-inset-right,0px)))}
+  .hint{display:none}
+  .panel .brand,.panel .pane,.panel .tabs{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .panel .actions{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+/* touch screens have no hover, so keep section controls visible */
+@media (hover:none){.sec-ctl{display:flex}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
