@@ -68,9 +68,15 @@
       <span class="lbl">Imported PDF</span>
       <p id="pdfname" style="margin:0 0 8px;font-weight:500;overflow-wrap:anywhere"></p>
       <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px">Your PDF looks exactly as it did. Click any line of text to edit it in place; the original only changes where you edit. Drag the grip above a line to move that line, and use the toolbar for font, size and colour.</p>
-      <span class="lbl">Sections</span>
-      <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">Move a whole section with the arrows below, or with ▲ ▼ ⇕ above its heading. The section it passes swaps places, and line gaps and alignment stay the same. If a heading was missed, hover its line and press <b>H</b>.</p>
+      <span class="lbl">Sections and entries</span>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">Move whole sections, or whole entries (role, company, date and bullets move together), with the arrows below or the buttons above a line on the page. Use ＋ to add an entry in the same format as the others. If a heading or entry was missed, hover its line and press <b>H</b> or <b>E</b>.</p>
       <div id="pdfsecs"></div>
+      <span class="lbl">Spacing</span>
+      <div class="field"><label for="sp-line">Line spacing</label><output id="so-line"></output><input type="range" id="sp-line" min="60" max="200" step="5" value="100"></div>
+      <div class="field"><label for="sp-item">Bullet / paragraph spacing</label><output id="so-item"></output><input type="range" id="sp-item" min="40" max="250" step="5" value="100"></div>
+      <div class="field"><label for="sp-entry">Space between entries</label><output id="so-entry"></output><input type="range" id="sp-entry" min="40" max="250" step="5" value="100"></div>
+      <div class="field"><label for="sp-sec">Space between sections</label><output id="so-sec"></output><input type="range" id="sp-sec" min="40" max="250" step="5" value="100"></div>
+      <div class="chips" style="margin-top:12px"><button class="chip" id="b-sp-reset">Reset spacing</button><button class="chip" id="b-pundo" disabled>Undo layout change</button></div>
       <div class="chips" style="margin-top:12px"><button class="chip" id="b-addbox">+ Add text box</button><button class="chip" id="b-back">Back to CV types</button></div>
     </div>
     <div class="actions">

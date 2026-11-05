@@ -47,5 +47,10 @@ All paths in the site are relative, so it works under the `/cv-studio/` sub-path
 
 - Your draft autosaves in this browser's local storage. **Save draft** writes a `.json` file you can reopen with **Open a saved draft**.
 - **Import a PDF CV to edit** reads the first four pages of a PDF, shows it exactly as it was, and lets you click any line to edit it in place. The imported pages are kept in this browser's local storage, which can fill up with large PDFs; use **Save as PDF** to keep your result.
-- In an imported PDF you can move **whole sections**: use the arrows in the Sections list, or ▲ ▼ and the ⇕ drag handle beside a heading. The section it passes swaps places, and line gaps and left alignment stay exactly as they were. Headings are found by their wording (Profile, Experience, Education and so on) and spacing; if one is missed, hover its line and press **H**. Rules, boxes and images printed in the original PDF stay where they were.
+- In an imported PDF the page is understood as **sections** (Profile, Experience, Education…), **entries** inside them (each job or degree: title, company, date and bullets) and **lines**. You can:
+  - move a whole section or a whole entry with the arrows in the sidebar, or the buttons above a line on the page (drag a section by its ⇕ handle). The one it passes swaps places;
+  - **add an entry** (＋ Add work experience, or ＋ Below on an entry). It copies an existing entry's fonts, sizes, indents and line gaps, starts with placeholder text, and goes at the top of the section (most recent first) or directly below the entry you chose;
+  - delete a line, an entry or a whole section; everything below closes up, and **Undo layout change** brings it back;
+  - change **line**, **bullet/paragraph**, **entry** and **section** spacing with the sliders; the layout is rebuilt so every gap of the same kind stays equal, and a new page is added automatically if content no longer fits.
+  Headings and entries are found from their wording, dates and spacing; if one is missed, hover its line and press **H** (heading) or **E** (first line of an entry). Rules, boxes and images printed in the original PDF stay where they were.
 - **Save as PDF** produces an image-based PDF. For applications that read CVs automatically, use **Save as HTML**, open the file and print to PDF so the text stays selectable.
