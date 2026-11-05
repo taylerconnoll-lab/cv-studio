@@ -41,7 +41,19 @@ const CV_CSS = `
 .col.main .sec[data-kind="skills"] .sec-body ul{columns:2;column-gap:28px}
 .paper[data-layout="one"] .sec[data-kind="certs"] .sec-body ul{columns:2;column-gap:28px}
 `;
-{const st=document.createElement('style');st.id='cvcss';st.textContent=CV_CSS;document.head.append(st)}
+/* Styles for an imported PDF page, also reused verbatim by the HTML export. */
+const PDF_CSS = `
+.pdfwrap{width:794px}
+.stage .pdfwrap{transform:scale(var(--s,1));transform-origin:0 0}
+.pdfpage{position:relative;width:794px;background:#fff;margin:0 0 18px;box-shadow:0 2px 6px rgba(0,0,0,.18),0 12px 32px rgba(0,0,0,.18)}
+.pdfpage .bg{position:absolute;left:0;top:0;width:100%;height:100%;display:block;user-select:none;pointer-events:none}
+.tbw{position:absolute}
+.tbx{white-space:nowrap;line-height:1;outline:0;position:relative;min-width:1ch;margin:0}
+.cov{display:none;position:absolute}
+.cov.on{display:block}
+.tbw:not(.live) .tbx,.tbw:not(.live) .tbx *{color:transparent!important}
+`;
+for(const [id,css] of [['cvcss',CV_CSS],['pdfcss',PDF_CSS]]){const st=document.createElement('style');st.id=id;st.textContent=css;document.head.append(st)}
 
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -109,7 +121,7 @@ const TEXTS=['#1f2328','#000000','#2b3a4a','#3a3a3a'];
 const SIZES=[8,9,10,11,12,13,14,16,18,20,24,28,32,40];
 const KEY='cvstudio:v1';
 let S;
-const paper=$('#paper'), stage=$('#stage');
+const paper=$('#paper'), stage=$('#stage'), pdfwrap=$('#pdfwrap');
 const secById=id=>S.sections.find(s=>s.id===id);
 const stack=n=>{const serif=['Merriweather','Playfair Display','Source Serif 4','Libre Baskerville','EB Garamond','Georgia','Times New Roman'].includes(n);return `'${n}', ${serif?'Georgia, serif':'Arial, sans-serif'}`};
 const lum=h=>{const n=parseInt(h.slice(1),16);return (.299*(n>>16&255)+.587*(n>>8&255)+.114*(n&255))/255};
@@ -163,7 +175,15 @@ ${side?'<button data-act="swap" title="Move to other column" aria-label="Move to
 <h2 class="sec-title" contenteditable="true" data-st spellcheck="false">${s.title}</h2>
 <div class="sec-body" contenteditable="true" data-sb>${s.html}</div></section>`;
 }
+function setMode(){
+  const p=S.mode==='pdf';document.body.dataset.mode=p?'pdf':'tpl';
+  paper.hidden=p;$('#guides').hidden=p;pdfwrap.hidden=!p;
+  const act=$('.tabs [aria-selected="true"]').dataset.tab;
+  ['type','style','sec'].forEach(t=>{$('#p-'+t).hidden=p||t!==act});
+  $('#p-pdf').hidden=!p;$('.tabs').hidden=p;if(p)$('#pdfname').textContent=S.pdf.name+'.pdf';
+}
 function render(){
+  setMode();if(S.mode==='pdf'){renderPdf();return}
   applyVars();
   const H=S.header;
   const hd=`<header class="hd"><div class="name" contenteditable="true" data-f="name">${H.name}</div><div class="role" contenteditable="true" data-f="role">${H.role}</div><div class="contact" contenteditable="true" data-f="contact">${H.contact}</div></header>`;
@@ -178,6 +198,7 @@ function fit(){
   const w=c.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight)-(window.innerWidth>900?40:0);
   const s=Math.min(1,Math.max(.3,w/794));
   stage.style.setProperty('--s',s);
+  if(S.mode==='pdf'){stage.style.height=Math.ceil(pdfwrap.offsetHeight*s)+'px';$('#guides').innerHTML='';return}
   stage.style.height=Math.ceil(paper.offsetHeight*s)+'px';
   const g=$('#guides'); g.innerHTML='';
   const h=paper.offsetHeight;
@@ -186,6 +207,7 @@ function fit(){
 
 /* ---------- editing on the sheet ---------- */
 function syncEl(el){
+  if(el.classList&&el.classList.contains('tbx')){const w=el.closest('.tbw'),b=allBoxes().find(x=>x.id===w.dataset.id);if(b){b.html=el.innerHTML;setLive(b.id,b.o==null||b.html!==b.o||b.x!==b.ox||b.y!==b.oy)}saveSoon();return}
   if(el.dataset.f){S.header[el.dataset.f]=el.innerHTML}
   else{const sec=el.closest('.sec'),s=sec&&secById(sec.dataset.id);if(!s)return;
     if(el.hasAttribute('data-st')){s.title=el.innerHTML;s.te=true}else s.html=el.innerHTML}
@@ -302,7 +324,7 @@ const hostOf=n=>(n&&(n.nodeType===1?n:n.parentElement)||null)?.closest('[content
 document.addEventListener('selectionchange',()=>{
   const sel=getSelection();if(!sel.rangeCount)return;
   const r=sel.getRangeAt(0),h=hostOf(r.commonAncestorContainer);
-  if(h&&paper.contains(h))saved=r.cloneRange();
+  if(h&&(paper.contains(h)||pdfwrap.contains(h)))saved=r.cloneRange();
 });
 function withSel(fn,expand=true){
   if(!saved){toast('Click in the text you want to change first.');return}
@@ -325,7 +347,7 @@ $('#fSize').onchange=e=>{
   const px=parseInt(e.target.value,10);e.target.value='';if(!px)return;
   withSel(()=>{
     document.execCommand('fontSize',false,'7');
-    $$('font[size="7"],span[style*="xxx-large"]',paper).forEach(f=>{
+    $$('font[size="7"],span[style*="xxx-large"]').forEach(f=>{
       const sp=document.createElement('span');sp.style.fontSize=px+'px';
       while(f.firstChild)sp.append(f.firstChild);
       $$('[style*="font-size"]',sp).forEach(x=>x.style.fontSize='');f.replaceWith(sp);
@@ -352,7 +374,7 @@ function dlSave(filename,data){
   }catch(e){toast('Could not save: '+((e&&e.message)||'unknown error'));return false}
 }
 const plain=h=>{const d=document.createElement('div');d.innerHTML=h;return d.textContent.trim()};
-const fname=()=>(plain(S.header.name).replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'CV')+'_CV';
+const fname=()=>S.mode==='pdf'?(S.pdf.name.replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'CV')+'_edited':(plain(S.header.name).replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'_')||'CV')+'_CV';
 
 /* CDN libraries: if the primary CDN failed, try a second one before giving up. */
 const LIB_FALLBACKS={
@@ -379,6 +401,7 @@ async function exportPDF(){
   try{
     try{await ensureLibs()}
     catch(e){toast('PDF tools could not load, so opening the print dialog instead. Choose Save as PDF there.',6000);printFallback();return}
+    if(S.mode==='pdf'){const d=await pdfModePDF();if(dlSave(fname()+'.pdf',d))toast('PDF saved.');return}
     if(document.fonts&&document.fonts.ready)await document.fonts.ready;if(document.activeElement)document.activeElement.blur();
     paper.style.transform='none';paper.style.boxShadow='none';
     const canvas=await html2canvas(paper,{scale:2,backgroundColor:'#ffffff',useCORS:true,ignoreElements:el=>el.classList&&el.classList.contains('no-export')});
@@ -394,9 +417,10 @@ async function exportPDF(){
     }
     if(dlSave(fname()+'.pdf',pdf.output('arraybuffer')))toast('PDF ready. It is a picture of the page, so see the note below the sheet for text-based PDFs.',5000);
   }catch(e){toast('Could not make the PDF: '+(e.message||e))}
-  finally{paper.style.transform='';paper.style.boxShadow='';btn.disabled=false;btn.textContent='Save as PDF';fit()}
+  finally{pdfwrap.style.transform='';paper.style.transform='';paper.style.boxShadow='';btn.disabled=false;btn.textContent='Save as PDF';fit()}
 }
 function buildHTML(){
+  if(S.mode==='pdf')return buildPdfHTML();
   const c=paper.cloneNode(true);
   $$('.no-export',c).forEach(n=>n.remove());$$('[contenteditable]',c).forEach(n=>n.removeAttribute('contenteditable'));
   c.style.removeProperty('transform');
@@ -421,9 +445,163 @@ $('#f-open').onchange=async e=>{
   }catch(err){toast('That file is not a CV Studio draft.')}
 };
 
+/* ---------- import an existing PDF and edit it in place ---------- */
+const esc=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const hex=(r,g,b)=>'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+let pdfjsReady;
+function ensurePdfjs(){
+  if(window.pdfjsLib&&pdfjsReady)return pdfjsReady;
+  const bases=['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/','https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/'];
+  pdfjsReady=(async()=>{
+    let err;
+    for(const base of bases){
+      try{
+        if(!window.pdfjsLib)await loadScript(base+'pdf.min.js');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';return;
+      }catch(e){err=e}
+    }
+    throw new Error('Could not load the PDF reader'+(err?'':''));
+  })();
+  pdfjsReady.catch(()=>{pdfjsReady=null});return pdfjsReady;
+}
+function pickFont(name,fam){
+  const n=(name||'').replace(/^[A-Z]{6}\+/,'').replace(/[^a-z]/gi,'').toLowerCase();
+  for(const f of FONTS)if(n.includes(f.toLowerCase().replace(/\s/g,'')))return f;
+  if(/arial|helvet/.test(n))return 'Arial';
+  if(/times|minion|palatino|cambria|garamond|georgia|serif/.test(n)&&!/sans/.test(n)||fam==='serif')return 'Source Serif 4';
+  return 'Lato';
+}
+async function readPage(page){
+  const W=794,R=2,v1=page.getViewport({scale:1}),cs=W/v1.width,vp=page.getViewport({scale:cs}),vpr=page.getViewport({scale:cs*R});
+  const cv=document.createElement('canvas');cv.width=Math.round(vpr.width);cv.height=Math.round(vpr.height);
+  const ctx=cv.getContext('2d',{willReadFrequently:true});
+  await page.render({canvasContext:ctx,viewport:vpr}).promise;
+  const tc=await page.getTextContent(),finfo={};
+  const info=n=>finfo[n]||(finfo[n]=(()=>{let nm='';try{nm=page.commonObjs.get(n).name||''}catch(e){}
+    const fam=(tc.styles[n]||{}).fontFamily||'';return{font:pickFont(nm,fam),bold:/bold|black|heavy|semibold|demi/i.test(nm),italic:/italic|oblique/i.test(nm)}})());
+  let its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>{const t=i.transform,[x,y]=vp.convertToViewportPoint(t[4],t[5]);
+    return{x,y,fs:Math.hypot(t[0],t[1])*cs,w:i.width*cs,s:i.str,f:info(i.fontName)}}).filter(i=>i.fs>2);
+  its.sort((a,b)=>a.y-b.y);const rows=[];
+  its.forEach(i=>{const r=rows.find(r=>Math.abs(r.y-i.y)<=Math.max(2,i.fs*.3));r?r.items.push(i):rows.push({y:i.y,items:[i]})});
+  const runs=[];
+  rows.forEach(r=>{r.items.sort((a,b)=>a.x-b.x);let c=null;
+    r.items.forEach(i=>{
+      const gap=c?i.x-c.xEnd:0;
+      if(c&&Math.abs(i.fs-c.fs)<1.2&&gap<=c.fs*.7&&gap>=-c.fs*.5){
+        const sp=gap>c.fs*.12&&!/\s$/.test(c.last)&&!/^\s/.test(i.s)?' ':'';
+        c.segs.push({t:sp+i.s,b:i.f.bold,i:i.f.italic});c.last=i.s;c.xEnd=i.x+i.w;
+      }else{c={x:i.x,y:i.y,fs:i.fs,xEnd:i.x+i.w,last:i.s,f:i.f,segs:[{t:i.s,b:i.f.bold,i:i.f.italic}]};runs.push(c)}
+    })});
+  const boxes=[],covers=[],cw=cv.width,ch=cv.height;
+  runs.forEach(r=>{
+    const bx=Math.max(0,Math.floor(r.x*R)),by=Math.max(0,Math.floor((r.y-r.fs*.86)*R)),bw=Math.min(cw-bx,Math.ceil((r.xEnd-r.x)*R)+2),bh=Math.min(ch-by,Math.ceil(r.fs*1.1*R));
+    if(bw<2||bh<2){return}
+    const pts=[[bx-3,by+bh/2],[bx+bw+3,by+bh/2],[bx+bw/2,by-3],[bx+bw/2,by+bh+3],[bx-3,by-3],[bx+bw+3,by-3],[bx-3,by+bh+3],[bx+bw+3,by+bh+3]],cnt={};
+    pts.forEach(([px,py])=>{px=Math.min(cw-1,Math.max(0,Math.round(px)));py=Math.min(ch-1,Math.max(0,Math.round(py)));
+      const d=ctx.getImageData(px,py,1,1).data,k=(d[0]>>4)+'-'+(d[1]>>4)+'-'+(d[2]>>4);(cnt[k]=cnt[k]||{n:0,d}).n++});
+    const bg=Object.values(cnt).sort((a,b)=>b.n-a.n)[0].d;
+    const px=ctx.getImageData(bx,by,bw,bh).data;let best=0,tc2=null;
+    for(let k=0;k<px.length;k+=4){const dd=Math.abs(px[k]-bg[0])+Math.abs(px[k+1]-bg[1])+Math.abs(px[k+2]-bg[2]);if(dd>best){best=dd;tc2=[px[k],px[k+1],px[k+2]]}}
+    const bl=(bg[0]*.299+bg[1]*.587+bg[2]*.114)/255;
+    r.bg=hex(bg[0],bg[1],bg[2]);r.rect=[bx,by,bw,bh];
+    r.color=best>90&&tc2?hex(...tc2):(bl>.5?'#000000':'#ffffff');
+  });
+  runs.forEach(r=>{if(!r.rect)return;
+    const html=r.segs.map(s=>{let h=esc(s.t);
+      if(s.b!==r.f.bold)h=s.b?`<b>${h}</b>`:`<span style="font-weight:400">${h}</span>`;
+      if(s.i!==r.f.italic)h=s.i?`<i>${h}</i>`:`<span style="font-style:normal">${h}</span>`;return h}).join('');
+    const id=uid();boxes.push({id,x:+r.x.toFixed(1),by:r.y,w:r.xEnd-r.x,fs:+r.fs.toFixed(2),color:r.color,font:r.f.font,bold:r.f.bold,italic:r.f.italic,html,o:html,live:false});
+    covers.push({id,x:+((r.rect[0]-1)/R).toFixed(1),y:+(r.rect[1]/R).toFixed(1),w:+((r.rect[2]+2)/R).toFixed(1),h:+(r.rect[3]/R).toFixed(1),c:r.bg,on:false});
+  });
+  return{h:Math.round(vp.height),bg:cv.toDataURL('image/jpeg',.92),boxes,covers};
+}
+async function importPdf(file){
+  const btn=$('#b-import');btn.disabled=true;toast('Reading the PDF…',60000);
+  try{
+    await ensurePdfjs();
+    const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
+    const pages=[];for(let i=1;i<=Math.min(doc.numPages,4);i++)pages.push(await readPage(await doc.getPage(i)));
+    const n=pages.reduce((a,p)=>a+p.boxes.length,0);
+    S.mode='pdf';S.pdf={name:file.name.replace(/\.pdf$/i,''),pages};render();
+    toast(n?`Imported ${pages.length} page${pages.length>1?'s':''}. Click any text to edit it in place.`+(doc.numPages>4?' Only the first 4 pages were imported.':''):'No text found, so this PDF may be a scan. You can still add text boxes.',5000);
+  }catch(e){toast('Could not read that PDF: '+(e.message||e),6000)}
+  finally{btn.disabled=false}
+}
+const boxFont=b=>`font-family:${stack(b.font)};font-size:${b.fs}px;font-weight:${b.bold?700:400};font-style:${b.italic?'italic':'normal'};color:${b.color}`;
+const boxHTML=b=>`<div class="tbw${b.live?' live':''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y==null?0:b.y}px"><div class="tbc no-export" contenteditable="false"><button class="grip" title="Drag to move" aria-label="Drag to move">⠿</button><button data-bx="del" title="Delete text" aria-label="Delete text">×</button></div><div class="tbx" contenteditable="true" spellcheck="false" style="${boxFont(b)}">${b.html}</div></div>`;
+const allBoxes=()=>S.pdf.pages.flatMap(p=>p.boxes);
+const scaleNow=()=>parseFloat(stage.style.getPropertyValue('--s'))||1;
+function layoutBoxes(){
+  const s=scaleNow(),pend=$$('.tbw',pdfwrap).filter(w=>{const b=allBoxes().find(x=>x.id===w.dataset.id);return b&&b.y==null});
+  pend.forEach(w=>{const b=allBoxes().find(x=>x.id===w.dataset.id),el=w.querySelector('.tbx');
+    const nat=el.getBoundingClientRect().width/s;if(b.w>0&&nat>b.w*1.03){b.fs=+(b.fs*Math.max(b.w/nat,.88)).toFixed(2);el.style.fontSize=b.fs+'px'}});
+  const offs=pend.map(w=>{const el=w.querySelector('.tbx'),mk=document.createElement('span');mk.style.cssText='display:inline-block;width:0;height:0';el.append(mk);
+    const o=(mk.getBoundingClientRect().bottom-el.getBoundingClientRect().top)/s;mk.remove();return o});
+  pend.forEach((w,i)=>{const b=allBoxes().find(x=>x.id===w.dataset.id);b.y=+(b.by-offs[i]).toFixed(1);b.ox=b.x;b.oy=b.y;w.style.top=b.y+'px'});
+}
+function renderPdf(){
+  pdfwrap.innerHTML=S.pdf.pages.map((p,i)=>`<div class="pdfpage" data-p="${i}" style="height:${p.h}px"><img class="bg" src="${p.bg}" alt="" draggable="false">${(p.covers||[]).map(c=>`<div class="cov${c.on?' on':''}" data-id="${c.id}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;background:${c.c}"></div>`).join('')}${p.boxes.map(boxHTML).join('')}</div>`).join('');
+  fit();layoutBoxes();fit();saveSoon();
+}
+function setLive(id,on){
+  const b=allBoxes().find(x=>x.id===id);if(!b||!!b.live===on)return;b.live=on;
+  const w=pdfwrap.querySelector(`.tbw[data-id="${id}"]`);if(w)w.classList.toggle('live',on);
+  S.pdf.pages.forEach((p,i)=>{const c=(p.covers||[]).find(x=>x.id===id);if(!c)return;c.on=on;
+    const el=pdfwrap.querySelector(`.pdfpage[data-p="${i}"] .cov[data-id="${id}"]`);if(el)el.classList.toggle('on',on)});
+  saveSoon();
+}
+pdfwrap.addEventListener('beforeinput',e=>{const el=e.target.closest('.tbx');if(el)setLive(el.closest('.tbw').dataset.id,true)});
+pdfwrap.addEventListener('input',e=>{const el=e.target.closest('.tbx');if(el)syncEl(el)});
+pdfwrap.addEventListener('paste',e=>{const el=e.target.closest('.tbx');if(!el)return;e.preventDefault();document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'))});
+pdfwrap.addEventListener('click',e=>{const b=e.target.closest('[data-bx="del"]');if(!b)return;
+  const w=b.closest('.tbw');setLive(w.dataset.id,true);S.pdf.pages.forEach(p=>{p.boxes=p.boxes.filter(x=>x.id!==w.dataset.id)});w.remove();saveSoon()});
+pdfwrap.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('.grip');if(!g)return;e.preventDefault();
+  const w=g.closest('.tbw'),b=allBoxes().find(x=>x.id===w.dataset.id),s=scaleNow();
+  setLive(b.id,true);const sx=e.clientX,sy=e.clientY,ox=b.x,oy=b.y;
+  const mv=ev=>{b.x=+(ox+(ev.clientX-sx)/s).toFixed(1);b.y=+(oy+(ev.clientY-sy)/s).toFixed(1);w.style.left=b.x+'px';w.style.top=b.y+'px'};
+  const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);saveSoon()};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+});
+$('#b-addbox').onclick=()=>{
+  const pgs=$$('.pdfpage',pdfwrap);let pi=0,top=60;const s=scaleNow();
+  pgs.forEach((p,i)=>{const r=p.getBoundingClientRect();if(r.bottom>140&&pi===0&&i>=0&&!pgs.slice(0,i).some(q=>q.getBoundingClientRect().bottom>140)){pi=i;top=Math.max(40,(120-r.top)/s)}});
+  const b={id:uid(),x:80,y:+top.toFixed(1),by:0,w:0,fs:12,color:'#000000',font:'Lato',bold:false,italic:false,html:'New text',live:true};
+  S.pdf.pages[pi].boxes.push(b);pgs[pi].insertAdjacentHTML('beforeend',boxHTML(b));saveSoon();
+  const el=pgs[pi].querySelector(`[data-id="${b.id}"] .tbx`);el.focus();document.execCommand('selectAll');
+};
+$('#b-back').onclick=()=>{S.mode='tpl';render()};
+$('#b-import').onclick=()=>$('#f-pdf').click();
+$('#f-pdf').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importPdf(f)};
+async function pdfModePDF(){
+  if(document.fonts&&document.fonts.ready)await document.fonts.ready;if(document.activeElement)document.activeElement.blur();
+  pdfwrap.style.transform='none';const pgs=$$('.pdfpage',pdfwrap);pgs.forEach(p=>{p.style.boxShadow='none'});
+  const {jsPDF}=window.jspdf;let pdf=null;
+  try{
+    for(let i=0;i<pgs.length;i++){
+      const cv=await html2canvas(pgs[i],{scale:2,backgroundColor:'#ffffff',useCORS:true,ignoreElements:el=>el.classList&&el.classList.contains('no-export')});
+      const w=594.75,h=S.pdf.pages[i].h*.75,o=h>w?'p':'l';
+      if(!pdf)pdf=new jsPDF({unit:'pt',format:[w,h],orientation:o});else pdf.addPage([w,h],o);
+      pdf.addImage(cv.toDataURL('image/jpeg',.92),'JPEG',0,0,w,h);
+    }
+  }finally{pgs.forEach(p=>{p.style.boxShadow=''});pdfwrap.style.transform=''}
+  return pdf.output('arraybuffer');
+}
+function buildPdfHTML(){
+  const c=pdfwrap.cloneNode(true);$$('.no-export',c).forEach(n=>n.remove());$$('[contenteditable]',c).forEach(n=>n.removeAttribute('contenteditable'));
+  const fonts=$('#gfonts').href;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(S.pdf.name)}</title><link rel="stylesheet" href="${fonts}"><style>${PDF_CSS}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;background:#e4e7ec;display:flex;flex-direction:column;align-items:center;padding:24px 0;font-family:sans-serif}
+.np{margin-bottom:16px;padding:9px 16px;font:14px sans-serif;cursor:pointer}
+@page{size:794px ${S.pdf.pages[0].h}px;margin:0}
+@media print{body{background:#fff;padding:0}.np{display:none}.pdfpage{box-shadow:none!important;margin:0!important;break-after:page}}
+</style></head><body><button class="np" onclick="window.print()">Print or save as PDF</button>${c.outerHTML}</body></html>`;
+}
+
 /* ---------- start ---------- */
 const stored=load();if(stored){fresh();S=Object.assign(S,stored);S.pool=stored.pool||{}}else fresh();
 buildPanel();render();
-new ResizeObserver(()=>fit()).observe(paper);
+const ro=new ResizeObserver(()=>fit());ro.observe(paper);ro.observe(pdfwrap);
 window.addEventListener('resize',fit);
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);

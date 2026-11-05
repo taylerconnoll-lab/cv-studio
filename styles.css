@@ -75,6 +75,17 @@ button{cursor:pointer}
 /* default CV variables (app.js overrides them per CV) */
 .paper{--cv-accent:#1f4f82;--cv-text:#1f2328;--cv-side:#f1f3f6;--cv-side-text:#1f2328;--cv-hd-text:#fff;--cv-head:'Lato',sans-serif;--cv-body:'Lato',sans-serif;--cv-size:10.5pt;--cv-lh:1.45;--cv-gap:16px;--cv-pad:40px}
 
+/* imported-PDF editing chrome (the sheet's own PDF styles live in app.js, PDF_CSS) */
+.tbx{caret-color:var(--accent)}
+.tbx:hover{outline:1px dashed var(--accent)}
+.tbx:focus{outline:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.tbc{display:none;position:absolute;left:0;top:-23px;gap:2px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:1px;z-index:6;font:12px var(--ui);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.tbw:hover>.tbc,.tbw:focus-within>.tbc{display:flex}
+.tbw:hover,.tbw:focus-within{z-index:5}
+.tbc button{background:none;border:0;min-width:24px;height:20px;border-radius:4px;padding:0 4px;color:inherit;font:inherit;line-height:1}
+.tbc button:hover{background:var(--soft)}
+.tbc .grip{cursor:grab;touch-action:none}
+
 /* editing chrome, excluded from exports */
 .paper [contenteditable]:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 .paper [contenteditable]:focus{background:color-mix(in srgb,var(--accent) 11%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent);border-radius:2px}
@@ -99,5 +110,5 @@ button{cursor:pointer}
   .panel .actions{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
 /* touch screens have no hover, so keep section controls visible */
-@media (hover:none){.sec-ctl{display:flex}}
+@media (hover:none){.sec-ctl,.tbc{display:flex}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}

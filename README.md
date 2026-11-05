@@ -11,7 +11,7 @@ A single-page CV builder. Pick a CV type, edit directly on the sheet, change fon
 | `app.js` | All behaviour. Also holds `CV_CSS`, the styles for the CV sheet itself, so the HTML export can embed them |
 | `favicon.svg` | Tab icon |
 
-External resources: Google Fonts, plus html2canvas and jsPDF from cdnjs. If cdnjs is unreachable, jsDelivr is tried. If both fail, **Save as PDF** opens the browser print dialog instead. If Google Fonts fails, the CV falls back to system fonts.
+External resources: Google Fonts, plus html2canvas and jsPDF (and pdf.js, loaded only when you import a PDF) from cdnjs. If cdnjs is unreachable, jsDelivr is tried. If both fail, **Save as PDF** opens the browser print dialog instead, and importing a PDF reports that the reader could not load. If Google Fonts fails, the CV falls back to system fonts.
 
 ## Run locally
 
@@ -46,4 +46,5 @@ All paths in the site are relative, so it works under the `/cv-studio/` sub-path
 ## Notes
 
 - Your draft autosaves in this browser's local storage. **Save draft** writes a `.json` file you can reopen with **Open a saved draft**.
+- **Import a PDF CV to edit** reads the first four pages of a PDF, shows it exactly as it was, and lets you click any line to edit it in place. The imported pages are kept in this browser's local storage, which can fill up with large PDFs; use **Save as PDF** to keep your result.
 - **Save as PDF** produces an image-based PDF. For applications that read CVs automatically, use **Save as HTML**, open the file and print to PDF so the text stays selectable.

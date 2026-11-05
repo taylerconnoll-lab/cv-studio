@@ -64,7 +64,15 @@
         <div class="chips" id="removed"></div>
       </div>
     </div>
+    <div class="pane" id="p-pdf" role="tabpanel" hidden>
+      <span class="lbl">Imported PDF</span>
+      <p id="pdfname" style="margin:0 0 8px;font-weight:500;overflow-wrap:anywhere"></p>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px">Your PDF looks exactly as it did. Click any line of text to edit it in place; the original only changes where you edit. Drag the grip above a line to move it, and use the toolbar for font, size and colour.</p>
+      <div class="chips"><button class="chip" id="b-addbox">+ Add text box</button><button class="chip" id="b-back">Back to CV types</button></div>
+    </div>
     <div class="actions">
+      <button class="btn" id="b-import" style="grid-column:1/-1">Import a PDF CV to edit</button>
+      <input type="file" id="f-pdf" accept="application/pdf,.pdf" hidden>
       <button class="btn pri" id="b-pdf">Save as PDF</button>
       <button class="btn" id="b-html">Save as HTML</button>
       <button class="btn" id="b-json">Save draft</button>
@@ -90,13 +98,14 @@
       <button data-cmd="removeFormat" title="Clear formatting">Clear</button>
       <button data-cmd="undo" title="Undo">Undo</button>
       <button data-cmd="redo" title="Redo">Redo</button>
-      <span class="hint">Click any text to edit. With nothing selected, changes apply to the whole block.</span>
+      <span class="hint">Click any text to edit. Select text to change its font, size or weight.</span>
     </div>
     <div class="stage" id="stage">
       <div class="paper" id="paper"></div>
+      <div class="pdfwrap" id="pdfwrap" hidden></div>
       <div class="guides no-export" id="guides"></div>
     </div>
-    <p class="foot">Your draft is kept in this browser. Save draft keeps a copy as a file. The PDF is a picture of the sheet; for applications that read CVs automatically, use Save as HTML, open it and print to PDF so the text stays selectable.</p>
+    <p class="foot">Your draft is kept in this browser. Use Save draft to keep a copy as a file.</p>
   </main>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
