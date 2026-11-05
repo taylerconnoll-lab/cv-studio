@@ -84,7 +84,10 @@ button{cursor:pointer}
 .tbw:hover,.tbw:focus-within{z-index:5}
 .tbc button{background:none;border:0;min-width:24px;height:20px;border-radius:4px;padding:0 4px;color:inherit;font:inherit;line-height:1}
 .tbc button:hover{background:var(--soft)}
-.tbc .grip{cursor:grab;touch-action:none}
+.tbc .grip,.tbc .sgrip{cursor:grab;touch-action:none}
+.tbc button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.sdrop{position:absolute;left:0;right:0;height:4px;margin-top:-2px;background:var(--accent);border-radius:2px;pointer-events:none;z-index:8}
+.secrow button:disabled{opacity:.35;cursor:default}
 
 /* editing chrome, excluded from exports */
 .paper [contenteditable]:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}

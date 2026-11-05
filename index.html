@@ -67,8 +67,11 @@
     <div class="pane" id="p-pdf" role="tabpanel" hidden>
       <span class="lbl">Imported PDF</span>
       <p id="pdfname" style="margin:0 0 8px;font-weight:500;overflow-wrap:anywhere"></p>
-      <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px">Your PDF looks exactly as it did. Click any line of text to edit it in place; the original only changes where you edit. Drag the grip above a line to move it, and use the toolbar for font, size and colour.</p>
-      <div class="chips"><button class="chip" id="b-addbox">+ Add text box</button><button class="chip" id="b-back">Back to CV types</button></div>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:12.5px">Your PDF looks exactly as it did. Click any line of text to edit it in place; the original only changes where you edit. Drag the grip above a line to move that line, and use the toolbar for font, size and colour.</p>
+      <span class="lbl">Sections</span>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">Move a whole section with the arrows below, or with ▲ ▼ ⇕ above its heading. The section it passes swaps places, and line gaps and alignment stay the same. If a heading was missed, hover its line and press <b>H</b>.</p>
+      <div id="pdfsecs"></div>
+      <div class="chips" style="margin-top:12px"><button class="chip" id="b-addbox">+ Add text box</button><button class="chip" id="b-back">Back to CV types</button></div>
     </div>
     <div class="actions">
       <button class="btn" id="b-import" style="grid-column:1/-1">Import a PDF CV to edit</button>

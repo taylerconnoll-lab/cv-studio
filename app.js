@@ -528,7 +528,8 @@ async function importPdf(file){
   finally{btn.disabled=false}
 }
 const boxFont=b=>`font-family:${stack(b.font)};font-size:${b.fs}px;font-weight:${b.bold?700:400};font-style:${b.italic?'italic':'normal'};color:${b.color}`;
-const boxHTML=b=>`<div class="tbw${b.live?' live':''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y==null?0:b.y}px"><div class="tbc no-export" contenteditable="false"><button class="grip" title="Drag to move" aria-label="Drag to move">⠿</button><button data-bx="del" title="Delete text" aria-label="Delete text">×</button></div><div class="tbx" contenteditable="true" spellcheck="false" style="${boxFont(b)}">${b.html}</div></div>`;
+const ctlHTML=b=>`<button class="grip" title="Drag this line" aria-label="Drag this line">⠿</button>${b.hd?'<button class="sgrip" title="Drag the whole section" aria-label="Drag the whole section">⇕</button><button data-bx="su" title="Move section up" aria-label="Move section up">▲</button><button data-bx="sd" title="Move section down" aria-label="Move section down">▼</button>':''}<button data-bx="hd" aria-pressed="${!!b.hd}" title="${b.hd?'This line is a section heading (click to unmark)':'Mark this line as a section heading'}" aria-label="Section heading">H</button><button data-bx="del" title="Delete text" aria-label="Delete text">×</button>`;
+const boxHTML=b=>`<div class="tbw${b.live?' live':''}" data-id="${b.id}" style="left:${b.x}px;top:${b.y==null?0:b.y}px"><div class="tbc no-export" contenteditable="false">${ctlHTML(b)}</div><div class="tbx" contenteditable="true" spellcheck="false" style="${boxFont(b)}">${b.html}</div></div>`;
 const allBoxes=()=>S.pdf.pages.flatMap(p=>p.boxes);
 const scaleNow=()=>parseFloat(stage.style.getPropertyValue('--s'))||1;
 function layoutBoxes(){
@@ -541,7 +542,9 @@ function layoutBoxes(){
 }
 function renderPdf(){
   pdfwrap.innerHTML=S.pdf.pages.map((p,i)=>`<div class="pdfpage" data-p="${i}" style="height:${p.h}px"><img class="bg" src="${p.bg}" alt="" draggable="false">${(p.covers||[]).map(c=>`<div class="cov${c.on?' on':''}" data-id="${c.id}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;height:${c.h}px;background:${c.c}"></div>`).join('')}${p.boxes.map(boxHTML).join('')}</div>`).join('');
-  fit();layoutBoxes();fit();saveSoon();
+  fit();layoutBoxes();fit();
+  if(!S.pdf.hd){S.pdf.hd=1;pdfFrames();detectHeadings()}
+  refreshPdfUI();saveSoon();
 }
 function setLive(id,on){
   const b=allBoxes().find(x=>x.id===id);if(!b||!!b.live===on)return;b.live=on;
@@ -553,8 +556,11 @@ function setLive(id,on){
 pdfwrap.addEventListener('beforeinput',e=>{const el=e.target.closest('.tbx');if(el)setLive(el.closest('.tbw').dataset.id,true)});
 pdfwrap.addEventListener('input',e=>{const el=e.target.closest('.tbx');if(el)syncEl(el)});
 pdfwrap.addEventListener('paste',e=>{const el=e.target.closest('.tbx');if(!el)return;e.preventDefault();document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'))});
-pdfwrap.addEventListener('click',e=>{const b=e.target.closest('[data-bx="del"]');if(!b)return;
-  const w=b.closest('.tbw');setLive(w.dataset.id,true);S.pdf.pages.forEach(p=>{p.boxes=p.boxes.filter(x=>x.id!==w.dataset.id)});w.remove();saveSoon()});
+pdfwrap.addEventListener('click',e=>{const b=e.target.closest('[data-bx]');if(!b)return;
+  const w=b.closest('.tbw'),id=w.dataset.id,box=allBoxes().find(x=>x.id===id),a=b.dataset.bx;
+  if(a==='del'){setLive(id,true);S.pdf.pages.forEach(p=>{p.boxes=p.boxes.filter(x=>x.id!==id)});w.remove();refreshPdfUI();saveSoon()}
+  else if(a==='hd'){box.hd=!box.hd;refreshPdfUI();saveSoon()}
+  else if(a==='su'||a==='sd')moveSection(id,a==='su'?-1:1)});
 pdfwrap.addEventListener('pointerdown',e=>{
   const g=e.target.closest('.grip');if(!g)return;e.preventDefault();
   const w=g.closest('.tbw'),b=allBoxes().find(x=>x.id===w.dataset.id),s=scaleNow();
@@ -573,6 +579,148 @@ $('#b-addbox').onclick=()=>{
 $('#b-back').onclick=()=>{S.mode='tpl';render()};
 $('#b-import').onclick=()=>$('#f-pdf').click();
 $('#f-pdf').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importPdf(f)};
+
+/* ---------- whole-section moves in an imported PDF ----------
+   A "row" is one printed line (all boxes sharing a baseline). A "section" is a heading row plus the rows under it,
+   within one column. Moving a section re-lays the column out in a flowed coordinate (page margins removed),
+   so line spacing, gaps between sections and left alignment stay exactly as they were. */
+const HEAD_RE=/^((professional|personal|career|executive|key|core|technical|relevant|selected|work|employment|additional|academic|clinical|leadership|volunteer)\s)?(profile|summary|objective|statement|experience|history|education|qualifications?|skills|competenc(y|ies)|expertise|achievements|highlights|certifications?|licen[cs]es|training|languages|interests|hobbies|projects|references|awards|publications|volunteering|research|teaching|memberships?|affiliations?|about( me)?|contact( details)?|details|courses|accomplishments|strengths)(\s(&|and)\s[a-z]+)*$/i;
+const boxText=b=>b.html.replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').trim();
+const normH=t=>t.replace(/[^a-z& ]/gi,' ').replace(/\s+/g,' ').trim();
+function pdfRows(){
+  const rows=[];
+  S.pdf.pages.forEach((p,pi)=>{
+    p.boxes.filter(b=>b.oy!=null&&b.y!=null).sort((a,b)=>a.y-b.y||a.x-b.x).forEach(b=>{
+      const r=rows.find(r=>r.pi===pi&&Math.abs(r.y-b.y)<=Math.max(2,b.fs*.45));
+      if(r){r.boxes.push(b);r.fs=Math.max(r.fs,b.fs)}else rows.push({pi,y:b.y,fs:b.fs,boxes:[b]});
+    });
+  });
+  rows.forEach(r=>{r.boxes.sort((a,b)=>a.x-b.x);r.lead=r.boxes[0];r.x=r.lead.x;r.h=r.fs*1.15});
+  return rows;
+}
+function pdfColumns(rows){
+  const xs=rows.map(r=>r.x).sort((a,b)=>a-b),cl=[];
+  xs.forEach(x=>{const c=cl[cl.length-1];if(c&&x-c.max<=12){c.n++;c.max=x;c.sum+=x}else cl.push({n:1,max:x,sum:x})});
+  const m=[];cl.filter(c=>c.n>=5).map(c=>c.sum/c.n).forEach(x=>{if(!m.length||x-m[m.length-1]>150)m.push(x)});
+  return m.length?m:[0];
+}
+const colOf=(cols,x)=>{let bi=0;cols.forEach((c,i)=>{if(Math.abs(x-c)<Math.abs(x-cols[bi]))bi=i});return bi};
+function detectHeadings(){
+  const rows=pdfRows();if(!rows.length)return;
+  const sig=r=>[Math.round(r.lead.fs),r.lead.bold?1:0,r.lead.color].join('|');
+  const cnt={};rows.forEach(r=>{const k=sig(r);cnt[k]=(cnt[k]||0)+boxText(r.lead).length});
+  const body=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  const bodyFs=parseFloat(body);
+  const short=r=>{const t=boxText(r.lead);return t.length>2&&t.length<=45&&r.boxes.length<=2};
+  /* spacing: a heading follows a bigger gap than the normal line pitch (unless it is first in its column) */
+  const cols=pdfColumns(rows),fm=flowMap();
+  rows.forEach(r=>{r.col=colOf(cols,r.x);r.f=fm.to(r.pi,r.y)});
+  const gapsBefore=new Map(),allGaps=[];
+  cols.forEach((_,ci)=>{const rs=rows.filter(r=>r.col===ci).sort((a,b)=>a.f-b.f);
+    rs.forEach((r,i)=>{if(i){const g=r.f-rs[i-1].f;gapsBefore.set(r,g);allGaps.push(g)}else gapsBefore.set(r,Infinity)})});
+  allGaps.sort((a,b)=>a-b);
+  const tight=allGaps.filter(g=>g>=bodyFs*.8),lo=tight[0]||0,near=tight.filter(g=>g<=lo*1.2);
+  const pitch=near.length?near[Math.floor(near.length/2)]:0; /* the normal line-to-line distance */
+  const looksLikeHeading=r=>{const t=boxText(r.lead);
+    return t.length<=40&&/^[A-Z0-9]/.test(t)&&!/[.,;:!?]$/.test(t)&&HEAD_RE.test(normH(t))&&gapsBefore.get(r)>=pitch*1.25};
+  const heads=new Set(rows.filter(looksLikeHeading));
+  if(heads.size>=2){const ks=new Set([...heads].map(sig));rows.forEach(r=>{if(sig(r)!==body&&ks.has(sig(r))&&short(r))heads.add(r)})}
+  else rows.forEach(r=>{if(short(r)&&r.boxes.length===1&&sig(r)!==body&&(r.lead.bold||r.lead.fs>=bodyFs*1.12)&&!/[.,;:]$/.test(boxText(r.lead)))heads.add(r)});
+  allBoxes().forEach(b=>{b.hd=false});rows.forEach(r=>{r.lead.hd=heads.has(r)});
+}
+/* The text area of each page, measured once from the original layout and then kept fixed. */
+function pdfFrames(){
+  if(S.pdf.frames&&S.pdf.frames.length===S.pdf.pages.length)return S.pdf.frames;
+  S.pdf.frames=S.pdf.pages.map(p=>{const o=p.boxes.filter(b=>b.oy!=null);
+    return o.length?{ct:Math.min(...o.map(b=>b.oy)),cb:Math.max(...o.map(b=>b.oy+b.fs*1.15))}:{ct:0,cb:p.h}});
+  return S.pdf.frames;
+}
+function flowMap(){
+  const fr=pdfFrames(),F=[];let a=0;fr.forEach((f,i)=>{F[i]=a;a+=f.cb-f.ct});
+  return{fr,F,to:(pi,y)=>F[pi]+(y-fr[pi].ct),
+    from:f=>{for(let k=0;k<fr.length;k++){if(k===fr.length-1||f<F[k+1])return{pi:k,y:fr[k].ct+(f-F[k])}}},
+    end:k=>k+1<fr.length?F[k+1]:Infinity};
+}
+function pdfSections(){
+  const rows=pdfRows(),cols=pdfColumns(rows),fm=flowMap(),secs=[];
+  rows.forEach(r=>{r.col=colOf(cols,r.x);r.f=fm.to(r.pi,r.y)});
+  cols.forEach((_,ci)=>{
+    let cur=null;
+    rows.filter(r=>r.col===ci).sort((a,b)=>a.f-b.f).forEach(r=>{
+      if(r.lead.hd||!cur){cur={id:r.lead.id,col:ci,rows:[],head:r.lead.hd?r:null};secs.push(cur)}
+      cur.rows.push(r);
+    });
+  });
+  secs.forEach(sc=>{sc.title=sc.head?boxText(sc.head.lead):'Header';sc.T=Math.min(...sc.rows.map(r=>r.f));sc.B=Math.max(...sc.rows.map(r=>r.f+r.h))});
+  return{secs,cols,fm};
+}
+/* Re-lay one column in a new section order. Gaps stay in their slots, so spacing is uniform. */
+function relayout(oldOrder,newOrder,fm){
+  const gaps=oldOrder.map((sc,i)=>i+1<oldOrder.length?Math.max(0,oldOrder[i+1].T-sc.B):0);
+  let cursor=oldOrder[0].T;const plan=[];
+  newOrder.forEach((sc,idx)=>{
+    sc.rows.forEach(r=>{
+      let f=cursor+(r.f-sc.T),loc=fm.from(f);
+      if(f+r.h>fm.end(loc.pi)){const push=fm.end(loc.pi)-f;cursor+=push;f+=push;loc=fm.from(f)}
+      plan.push({r,pi:loc.pi,y:loc.y});
+    });
+    cursor+=(sc.B-sc.T)+gaps[idx];
+  });
+  return plan;
+}
+function commitPlan(plan){
+  for(const q of plan){const pg=S.pdf.pages[q.pi];if(q.y+q.r.h>pg.h-6)return false}
+  plan.forEach(({r,pi,y})=>{
+    const dy=y-r.y;if(Math.abs(dy)<.5&&pi===r.pi)return;
+    r.boxes.forEach(b=>{
+      const ny=+(y+(b.y-r.y)).toFixed(1);b.y=ny;
+      if(pi!==r.pi){S.pdf.pages[r.pi].boxes=S.pdf.pages[r.pi].boxes.filter(x=>x!==b);S.pdf.pages[pi].boxes.push(b)}
+      b.live=true;S.pdf.pages.forEach(p=>{const c=(p.covers||[]).find(x=>x.id===b.id);if(c)c.on=true});
+    });
+  });
+  return true;
+}
+function applySectionOrder(sec,newIndex,all){
+  const sameCol=all.secs.filter(x=>x.col===sec.col),from=sameCol.indexOf(sec);
+  if(newIndex===from)return;
+  const next=sameCol.filter(x=>x!==sec);next.splice(newIndex,0,sec);
+  const plan=relayout(sameCol,next,all.fm);
+  if(!commitPlan(plan)){toast('There is not enough room on the page to move that section there.',4500);return}
+  renderPdf();
+}
+function moveSection(boxId,dir){
+  const all=pdfSections(),sec=all.secs.find(x=>x.head&&x.head.lead.id===boxId);if(!sec)return;
+  const sameCol=all.secs.filter(x=>x.col===sec.col),i=sameCol.indexOf(sec),j=i+dir;
+  if(j<0||j>=sameCol.length){toast(dir<0?'That section is already first.':'That section is already last.');return}
+  applySectionOrder(sec,j,all);
+}
+function refreshPdfUI(){
+  allBoxes().forEach(b=>{const w=pdfwrap.querySelector(`.tbw[data-id="${b.id}"] .tbc`);if(w)w.innerHTML=ctlHTML(b)});
+  const {secs,cols}=pdfSections(),box=$('#pdfsecs');if(!box)return;
+  box.innerHTML=secs.map((sc,i)=>{const sib=secs.filter(x=>x.col===sc.col),k=sib.indexOf(sc);
+    return `<div class="secrow" data-sid="${sc.id}"><div class="n">${esc(sc.title)}${cols.length>1?`<em>col ${sc.col+1}</em>`:''}</div><div class="mini"><button data-sm="-1" aria-label="Move section up"${sc.head&&k>0?'':' disabled'}>↑</button><button data-sm="1" aria-label="Move section down"${sc.head&&k<sib.length-1?'':' disabled'}>↓</button></div></div>`}).join('');
+}
+$('#pdfsecs').addEventListener('click',e=>{const b=e.target.closest('[data-sm]');if(!b||b.disabled)return;
+  const sid=b.closest('.secrow').dataset.sid,all=pdfSections(),sec=all.secs.find(x=>x.id===sid);
+  if(sec&&sec.head)moveSection(sec.head.lead.id,+b.dataset.sm)});
+/* drag a whole section by the ⇕ handle on its heading */
+pdfwrap.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('.sgrip');if(!g)return;e.preventDefault();e.stopPropagation();
+  const id=g.closest('.tbw').dataset.id,all=pdfSections(),sec=all.secs.find(x=>x.head&&x.head.lead.id===id);if(!sec)return;
+  const sameCol=all.secs.filter(x=>x.col===sec.col),others=sameCol.filter(x=>x!==sec),s=scaleNow();
+  let target=sameCol.indexOf(sec),line=null;
+  const place=ev=>{
+    const pgs=$$('.pdfpage',pdfwrap);let pi=pgs.findIndex(p=>{const r=p.getBoundingClientRect();return ev.clientY>=r.top&&ev.clientY<=r.bottom});
+    if(pi<0)return;const r=pgs[pi].getBoundingClientRect(),f=all.fm.to(pi,(ev.clientY-r.top)/s);
+    target=others.filter(x=>(x.T+x.B)/2<f).length;
+    const bf=target<others.length?others[target].T-4:others[others.length-1].B+2,loc=all.fm.from(bf);
+    if(!line){line=document.createElement('div');line.className='sdrop no-export'}
+    pgs[loc.pi].append(line);line.style.top=loc.y+'px';
+  };
+  const mv=ev=>place(ev);
+  const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);if(line)line.remove();applySectionOrder(sec,target,all)};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+});
 async function pdfModePDF(){
   if(document.fonts&&document.fonts.ready)await document.fonts.ready;if(document.activeElement)document.activeElement.blur();
   pdfwrap.style.transform='none';const pgs=$$('.pdfpage',pdfwrap);pgs.forEach(p=>{p.style.boxShadow='none'});
