@@ -136,3 +136,14 @@ button{cursor:pointer}
 .shrow .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:7px;vertical-align:-1px;box-shadow:0 0 0 1px var(--line)}
 .shrow.gone .n{opacity:.5;text-decoration:line-through}
 .shrow .slc{width:26px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:none}
+
+/* multi-select of lines in an imported PDF */
+.tbw.sel .tbx{outline:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.tbw.dragging{opacity:.35}
+.lasso{position:absolute;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);z-index:9;pointer-events:none}
+.selbar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;display:flex;gap:6px;align-items:center;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 10px;box-shadow:0 6px 24px rgba(0,0,0,.25);font:13px var(--ui)}
+.selbar[hidden]{display:none}
+.selbar button{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit}
+.selbar button:hover{border-color:var(--accent)}
+.selbar .hint{color:var(--muted);font-size:11.5px}
+@media (max-width:700px){.selbar .hint{display:none}}

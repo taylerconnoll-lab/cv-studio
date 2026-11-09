@@ -843,20 +843,22 @@ function rowClass(r,prev){
   if(r.lead.ent)return 'entry';
   return r.lead.gc==='item'?'item':'line';
 }
+/* group an ordered list of rows into sections and entries, using the H / E flags the rows carry */
+function buildSecs(rs,ci){
+  const secs=[];let sec=null,ent=null;
+  rs.forEach(r=>{
+    if(r.lead.hd){sec={id:r.lead.id,head:r,pre:[],entries:[],col:ci};secs.push(sec);ent=null;return}
+    if(!sec){sec={id:'top'+ci,head:null,pre:[],entries:[],col:ci};secs.push(sec)}
+    if(r.lead.ent){ent={id:r.lead.id,rows:[],sec};sec.entries.push(ent)}
+    (ent?ent.rows:sec.pre).push(r);
+  });
+  secs.forEach(sc=>{const all=secRows(sc);sc.title=sc.head?boxText(sc.head.lead):'Header';sc.T=Math.min(...all.map(r=>r.f));sc.B=Math.max(...all.map(r=>r.f+r.h))});
+  return secs;
+}
 function pdfModel(){
   const rows=pdfRows(),colsx=pdfColumns(rows),fm=flowMap();
   rows.forEach(r=>{r.col=colOf(colsx,r.x);r.f=fm.to(r.pi,r.y)});
-  const cols=colsx.map((_,ci)=>{
-    const rs=rows.filter(r=>r.col===ci).sort((a,b)=>a.f-b.f),secs=[];let sec=null,ent=null;
-    rs.forEach(r=>{
-      if(r.lead.hd){sec={id:r.lead.id,head:r,pre:[],entries:[],col:ci};secs.push(sec);ent=null;return}
-      if(!sec){sec={id:'top'+ci,head:null,pre:[],entries:[],col:ci};secs.push(sec)}
-      if(r.lead.ent){ent={id:r.lead.id,rows:[],sec};sec.entries.push(ent)}
-      (ent?ent.rows:sec.pre).push(r);
-    });
-    secs.forEach(sc=>{const all=secRows(sc);sc.title=sc.head?boxText(sc.head.lead):'Header';sc.T=Math.min(...all.map(r=>r.f));sc.B=Math.max(...all.map(r=>r.f+r.h))});
-    return{secs};
-  });
+  const cols=colsx.map((_,ci)=>({secs:buildSecs(rows.filter(r=>r.col===ci).sort((a,b)=>a.f-b.f),ci)}));
   return{cols,fm,colsx};
 }
 /* ---- undo for layout changes ---- */
@@ -1010,7 +1012,7 @@ function refreshPdfUI(){
     return h}).join('')).join('');
   const mu=S.pdf.mult||{line:1,item:1,entry:1,sec:1};
   ['line','item','entry','sec'].forEach(k=>{const r=$('#sp-'+k),o=$('#so-'+k);if(r&&document.activeElement!==r){r.value=Math.round(mu[k]*100)}if(o)o.textContent=Math.round(mu[k]*100)+'%'});
-  refreshShapesUI();syncUndo();
+  refreshShapesUI();syncUndo();applySel();
 }
 $('#pdfsecs').addEventListener('click',e=>{
   const b=e.target.closest('[data-pa]');if(!b||b.disabled)return;const a=b.dataset.pa;
@@ -1047,7 +1049,107 @@ pdfwrap.addEventListener('pointerdown',e=>{
   const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);if(line)line.remove();moveSectionTo(m,sec,target)};
   document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
 });
+/* ---------- multi-select: pick lines (click a handle, shift-click, or drag a box round them) and move them together ----------
+   The picked lines keep the gaps between each other; everything else re-flows around the new position. */
+const sel=new Set(); /* ids of every box on a selected line */
+const rowSel=r=>r.boxes.some(b=>sel.has(b.id));
+const allRows=m=>m.cols.flatMap(c=>c.secs.flatMap(secRows));
+function applySel(){
+  $$('.tbw',pdfwrap).forEach(w=>w.classList.toggle('sel',sel.has(w.dataset.id)));
+  const bar=$('#selbar');if(!bar)return;
+  if(!sel.size||S.mode!=='pdf'){bar.hidden=true;return}
+  const n=allRows(pdfModel()).filter(rowSel).length;
+  $('#selcount').textContent=n+(n===1?' line':' lines')+' selected';bar.hidden=false;
+}
+function toggleRow(r,on){r.boxes.forEach(b=>{if(on)sel.add(b.id);else sel.delete(b.id)})}
+function clearSel(){if(!sel.size)return;sel.clear();applySel()}
+/* move the selected rows to sit before/after `tgt` (a row that is not selected); tgt null = end of column ci */
+function moveRowsTo(m,tgt,after,ci){
+  const flats=m.cols.map(c=>c.secs.flatMap(secRows)),tops=flats.map(f=>f.length?Math.min(...f.map(r=>r.f)):0);
+  const picked=[];flats.forEach((f,i)=>f.forEach(r=>{if(rowSel(r))picked.push({r,i})}));
+  if(!picked.length)return;
+  snapPdf();
+  const rest=flats.map(f=>f.filter(r=>!rowSel(r))),ti=tgt?tgt.col:ci;
+  let at=tgt?rest[ti].indexOf(tgt)+(after?1:0):rest[ti].length;if(at<0)at=rest[ti].length;
+  const grp=picked.map(({r,i})=>{
+    if(i!==ti){const dx=m.colsx[ti]-m.colsx[i];r.boxes.forEach(b=>{b.x=+(b.x+dx).toFixed(1);setLive(b.id,true)})}
+    r.col=ti;return r});
+  rest[ti].splice(at,0,...grp);
+  m.cols.forEach((c,i)=>{
+    const fl=rest[i];if(!fl.length){c.secs=[];return}
+    fl[0].f=tops[i]; /* the column's first line keeps the column's top */
+    c.secs=buildSecs(fl,i);
+  });
+  reflow(m,true);
+}
+function moveSelBy(dir){
+  const m=pdfModel(),flats=m.cols.map(c=>c.secs.flatMap(secRows)),ci=flats.findIndex(f=>f.some(rowSel));if(ci<0)return;
+  const f=flats[ci],idx=f.map((r,i)=>rowSel(r)?i:-1).filter(i=>i>=0);
+  if(dir<0){let k=idx[0]-1;while(k>=0&&rowSel(f[k]))k--;if(k<0){toast('Already at the top of the column.');return}moveRowsTo(m,f[k],false,ci)}
+  else{let k=idx[idx.length-1]+1;while(k<f.length&&rowSel(f[k]))k++;if(k>=f.length){toast('Already at the bottom of the column.');return}moveRowsTo(m,f[k],true,ci)}
+}
+function deleteSel(){
+  const m=pdfModel(),rows=allRows(m).filter(rowSel);if(!rows.length)return;
+  snapPdf();dropBoxes(rows);
+  const gone=new Set(rows);
+  m.cols.forEach((c,i)=>{const fl=c.secs.flatMap(secRows).filter(r=>!gone.has(r));if(fl.length)fl[0].f=Math.min(...fl.map(r=>r.f));c.secs=buildSecs(fl,i)});
+  sel.clear();reflow(m,true);toast(rows.length+' lines deleted. Use Undo layout change to bring them back.',4500);
+}
+$('#sel-up').onclick=()=>moveSelBy(-1);$('#sel-down').onclick=()=>moveSelBy(1);
+$('#sel-del').onclick=deleteSel;$('#sel-clear').onclick=clearSel;
+document.addEventListener('keydown',e=>{
+  if(S.mode!=='pdf'||!sel.size)return;
+  if(e.key==='Escape'){clearSel();return}
+  if(e.altKey&&(e.key==='ArrowUp'||e.key==='ArrowDown')){e.preventDefault();moveSelBy(e.key==='ArrowUp'?-1:1)}
+});
+/* drag a line (or all selected lines) by its handle; shift/ctrl/cmd-click the handle to add or remove a line; hold Alt to nudge freely instead */
+pdfwrap.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('.grip');if(!g||e.altKey)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  const id=g.closest('.tbw').dataset.id,row=allRows(pdfModel()).find(r=>r.boxes.some(b=>b.id===id));if(!row)return;
+  if(e.shiftKey||e.ctrlKey||e.metaKey){toggleRow(row,!rowSel(row));applySel();return}
+  if(!rowSel(row)){sel.clear();toggleRow(row,true)}
+  applySel();
+  const m=pdfModel(),s=scaleNow(),pgs=$$('.pdfpage',pdfwrap),flats=m.cols.map(c=>c.secs.flatMap(secRows)),sx=e.clientX,sy=e.clientY;
+  let tgt=null,after=false,ci=0,line=null,moved=false;
+  $$('.tbw.sel',pdfwrap).forEach(w=>w.classList.add('dragging'));
+  const place=ev=>{
+    const pi=pgs.findIndex(p=>{const r=p.getBoundingClientRect();return ev.clientY>=r.top&&ev.clientY<=r.bottom});if(pi<0)return;
+    const r=pgs[pi].getBoundingClientRect(),fl=m.fm.to(pi,(ev.clientY-r.top)/s);
+    ci=colOf(m.colsx,(ev.clientX-r.left)/s);
+    const rest=flats[ci].filter(x=>!rowSel(x)),n=rest.filter(x=>x.f+x.h/2<fl).length;
+    if(n<rest.length){tgt=rest[n];after=false}else{tgt=rest[rest.length-1]||null;after=true}
+    const y=n<rest.length?rest[n].f-3:(rest.length?rest[rest.length-1].f+rest[rest.length-1].h+2:fl),loc=m.fm.from(y);
+    if(!line){line=document.createElement('div');line.className='sdrop no-export'}
+    pgs[loc.pi].append(line);line.style.top=loc.y+'px';line.style.left=Math.max(0,m.colsx[ci]-8)+'px';line.style.right='24px';
+  };
+  const mv=ev=>{if(!moved&&Math.hypot(ev.clientX-sx,ev.clientY-sy)<4)return;moved=true;place(ev)};
+  const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);
+    if(line)line.remove();$$('.dragging',pdfwrap).forEach(w=>w.classList.remove('dragging'));
+    if(moved&&line)moveRowsTo(m,tgt,after,ci)};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+},true);
+/* drag a box over empty page to select every line it touches (hold shift to add to the selection) */
+pdfwrap.addEventListener('pointerdown',e=>{
+  if(e.button!==0||e.target.closest('.tbw,.shp,.tbc'))return;const pg=e.target.closest('.pdfpage');if(!pg)return;
+  const s=scaleNow(),r0=pg.getBoundingClientRect(),sx=(e.clientX-r0.left)/s,sy=(e.clientY-r0.top)/s;
+  if(!e.shiftKey)clearSel();
+  const base=new Set(sel),box=document.createElement('div');box.className='lasso no-export';pg.append(box);
+  const rows=allRows(pdfModel());
+  const mv=ev=>{
+    const x=(ev.clientX-r0.left)/s,y=(ev.clientY-r0.top)/s,L=Math.min(x,sx),T=Math.min(y,sy),R=Math.max(x,sx),B=Math.max(y,sy);
+    box.style.cssText=`left:${L}px;top:${T}px;width:${R-L}px;height:${B-T}px`;
+    sel.clear();base.forEach(i=>sel.add(i));
+    pg.querySelectorAll('.tbw').forEach(w=>{const q=w.getBoundingClientRect(),l=(q.left-r0.left)/s,t=(q.top-r0.top)/s;
+      if(l<R&&l+q.width/s>L&&t<B&&t+q.height/s>T)sel.add(w.dataset.id)});
+    rows.forEach(r=>{if(rowSel(r))toggleRow(r,true)}); /* a line is selected as a whole */
+    $$('.tbw',pdfwrap).forEach(w=>w.classList.toggle('sel',sel.has(w.dataset.id)));
+  };
+  const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);box.remove();applySel()};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+});
 async function pdfModePDF(){
+  clearSel();
   if(document.fonts&&document.fonts.ready)await document.fonts.ready;if(document.activeElement)document.activeElement.blur();
   pdfwrap.style.transform='none';const pgs=$$('.pdfpage',pdfwrap);pgs.forEach(p=>{p.style.boxShadow='none'});
   const {jsPDF}=window.jspdf;let pdf=null;
