@@ -55,6 +55,10 @@ const PDF_CSS = `
 .shp{position:absolute;background:transparent;box-sizing:border-box}
 .shp.live{background:var(--c)}
 .shp.del{display:none}
+.shp .sx{position:absolute;right:-9px;top:-9px;z-index:50;display:flex;gap:2px;align-items:center;font:12px sans-serif}
+.shp .sx button{width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#d93025;color:#fff;font:700 13px/18px sans-serif;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.shp .sx input[type=color]{width:18px;height:18px;padding:0;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer;background:none}
+@media print{.sx{display:none!important}}
 `;
 for(const [id,css] of [['cvcss',CV_CSS],['pdfcss',PDF_CSS]]){const st=document.createElement('style');st.id=id;st.textContent=css;document.head.append(st)}
 
@@ -631,7 +635,7 @@ function layoutBoxes(){
 const hexRgba=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`};
 const shapeLabel=sh=>sh.k==='highlight'?'Highlight':sh.k==='rule'?'Line':'Colour block';
 const shapeStyle=sh=>`left:${sh.x}px;top:${sh.y}px;width:${sh.w}px;height:${sh.h}px;--c:${hexRgba(sh.c,sh.a)}`;
-const shapeHTML=sh=>`<div class="shp ${sh.k}${sh.live?' live':''}${sh.del?' del':''}" data-sid="${sh.id}" tabindex="0" style="${shapeStyle(sh)}"><div class="tbc no-export" contenteditable="false"><span class="tag">${shapeLabel(sh)}</span><input type="color" class="shc" value="${sh.c}" title="Change colour" aria-label="Change colour"><button class="sgr" title="Drag to move" aria-label="Drag to move">⠿</button><button data-sh="del" title="Delete" aria-label="Delete">×</button></div><div class="rsz no-export" title="Drag to resize"></div></div>`;
+const shapeHTML=sh=>`<div class="shp ${sh.k}${sh.live?' live':''}${sh.del?' del':''}" data-sid="${sh.id}" tabindex="0" style="${shapeStyle(sh)}"><div class="tbc no-export" contenteditable="false"><span class="tag">${shapeLabel(sh)}</span><input type="color" class="shc" value="${sh.c}" title="Change colour" aria-label="Change colour"><button class="sgr" title="Drag to move" aria-label="Drag to move">⠿</button><button data-sh="del" title="Delete" aria-label="Delete">×</button></div><div class="sx no-export" contenteditable="false"><input type="color" class="shc" value="${sh.c}" title="Change colour" aria-label="Change colour"><button data-sh="del" title="Delete this ${shapeLabel(sh).toLowerCase()}" aria-label="Delete">×</button></div><div class="rsz no-export" title="Drag to resize"></div></div>`;
 const allShapes=()=>S.pdf.pages.flatMap(p=>p.shapes||[]);
 const shapePage=sh=>S.pdf.pages.findIndex(p=>(p.shapes||[]).includes(sh));
 /* the first edit of a shape wipes the original pixels (cover) and redraws it as a real object; text that sat on it is redrawn as live text */
@@ -653,7 +657,7 @@ function liveShape(sh){
 function paintShape(sh){
   const el=pdfwrap.querySelector(`.shp[data-sid="${sh.id}"]`);if(!el)return;
   el.setAttribute('style',shapeStyle(sh));el.classList.toggle('del',!!sh.del);
-  const i=el.querySelector('.shc');if(i&&i.value!==sh.c)i.value=sh.c;
+  el.querySelectorAll('.shc').forEach(i=>{if(i.value!==sh.c)i.value=sh.c});
 }
 function refreshShapesUI(){
   const box=$('#pdfshapes');if(!box)return;
