@@ -346,7 +346,9 @@ function withSel(fn,expand=true){
 $('#tb').addEventListener('mousedown',e=>{if(e.target.closest('button'))e.preventDefault()});
 $('#tb').addEventListener('click',e=>{
   const b=e.target.closest('[data-cmd]');if(!b)return;
-  const c=b.dataset.cmd,keep=['insertUnorderedList','justifyLeft','justifyCenter','justifyRight','undo','redo'].includes(c);
+  const c=b.dataset.cmd;
+  if(S.mode==='pdf'&&(c==='undo'||c==='redo')){c==='undo'?undoPdf():redoPdf();return}
+  const keep=['insertUnorderedList','justifyLeft','justifyCenter','justifyRight','undo','redo'].includes(c);
   withSel(()=>document.execCommand(c,false,null),!keep);
 });
 $('#fFont').onchange=e=>{const v=e.target.value;if(v)withSel(()=>document.execCommand('fontName',false,v));e.target.value=''};
@@ -709,13 +711,18 @@ function setLive(id,on){
     const el=pdfwrap.querySelector(`.pdfpage[data-p="${i}"] .cov[data-id="${id}"]`);if(el)el.classList.toggle('on',on)});
   saveSoon();
 }
-pdfwrap.addEventListener('beforeinput',e=>{const el=e.target.closest('.tbx');if(el)setLive(el.closest('.tbw').dataset.id,true)});
+pdfwrap.addEventListener('beforeinput',e=>{const el=e.target.closest('.tbx');if(el){const id=el.closest('.tbw').dataset.id;typingSnap(id);setLive(id,true)}});
 pdfwrap.addEventListener('input',e=>{const el=e.target.closest('.tbx');if(el)syncEl(el)});
-pdfwrap.addEventListener('paste',e=>{const el=e.target.closest('.tbx');if(!el)return;e.preventDefault();document.execCommand('insertText',false,(e.clipboardData||window.clipboardData).getData('text/plain'))});
+pdfwrap.addEventListener('paste',e=>{const el=e.target.closest('.tbx');if(!el)return;e.preventDefault();pasteText(el,(e.clipboardData||window.clipboardData).getData('text/plain'))});
+pdfwrap.addEventListener('keydown',e=>{
+  const el=e.target.closest&&e.target.closest('.tbx');if(!el||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.key==='Enter'){e.preventDefault();enterIn(el)}
+  else if(e.key==='Backspace'&&!el.textContent.replace(/​/g,'').trim()&&getSelection().isCollapsed){e.preventDefault();removeEmptyLine(el)}
+});
 pdfwrap.addEventListener('click',e=>{const b=e.target.closest('[data-bx]');if(!b)return;
   const w=b.closest('.tbw'),id=w.dataset.id,box=allBoxes().find(x=>x.id===id),a=b.dataset.bx;
-  if(a==='hd'){box.hd=!box.hd;if(box.hd)box.ent=false;refreshPdfUI();saveSoon()}
-  else if(a==='ent'){box.ent=!box.ent;if(box.ent)box.hd=false;refreshPdfUI();saveSoon()}
+  if(a==='hd'){snapPdf();box.hd=!box.hd;if(box.hd)box.ent=false;refreshPdfUI();saveSoon()}
+  else if(a==='ent'){snapPdf();box.ent=!box.ent;if(box.ent)box.hd=false;refreshPdfUI();saveSoon()}
   else if(a==='del')deleteLine(id);
   else if(a==='su'||a==='sd')moveSection(id,a==='su'?-1:1);
   else if(a==='sa')addEntry(id,'sec',0);
@@ -862,22 +869,68 @@ function pdfModel(){
   return{cols,fm,colsx};
 }
 /* ---- undo for layout changes ---- */
-let pundo=[];
-function snapPdf(){
-  pundo.push({j:JSON.stringify({p:S.pdf.pages.map(p=>({h:p.h,boxes:p.boxes,covers:p.covers,shapes:p.shapes||[],auto:p.auto})),fr:S.pdf.frames,mult:S.pdf.mult}),bg:S.pdf.pages.map(p=>p.bg)});
-  if(pundo.length>25)pundo.shift();syncUndo();
+let pundo=[],predo=[];
+const capPdf=()=>({j:JSON.stringify({p:S.pdf.pages.map(p=>({h:p.h,boxes:p.boxes,covers:p.covers,shapes:p.shapes||[],auto:p.auto})),fr:S.pdf.frames,mult:S.pdf.mult}),bg:S.pdf.pages.map(p=>p.bg)});
+/* Highlights, tags and rules that sit on a line travel with it when the layout changes.
+   Which line each one belongs to is read before the change (in snapPdf), then applied after the re-layout. */
+let pendingAtt=null;
+function attachShapes(){
+  const rows=pdfRows(),res=[];
+  S.pdf.pages.forEach((p,pi)=>(p.shapes||[]).forEach(sh=>{
+    if(sh.del||sh.h>150)return; /* tall bars (a page sidebar) stay put */
+    const rs=rows.filter(r=>r.pi===pi);let best=null,bo=0;
+    rs.forEach(r=>{const o=Math.min(sh.y+sh.h,r.y+r.h)-Math.max(sh.y,r.y);if(o>bo){bo=o;best=r}});
+    if(best&&bo>=Math.min(sh.h,best.h)*.4){res.push({sh,row:best,dy:sh.y-best.y});return}
+    if(Math.min(sh.w,sh.h)<=4){ /* a rule belongs to the line just above it */
+      let up=null;rs.forEach(r=>{if(r.y+r.h<=sh.y+1&&(!up||r.y>up.y))up=r});
+      if(up&&sh.y-(up.y+up.h)<=20)res.push({sh,row:up,dy:sh.y-up.y});
+    }
+  }));
+  return res;
 }
-function undoPdf(){
-  const u=pundo.pop();if(!u)return;const d=JSON.parse(u.j);
+function moveShapes(att,all){
+  const byBox=new Map();all.forEach(r=>r.boxes.forEach(b=>byBox.set(b.id,r)));let crossed=false;
+  att.forEach(({sh,row,dy})=>{
+    const nr=row.boxes.map(b=>byBox.get(b.id)).find(Boolean),from=S.pdf.pages.findIndex(p=>(p.shapes||[]).includes(sh));
+    if(from<0)return;
+    if(!nr){liveShape(sh);sh.del=true;crossed=true;return} /* its line was deleted, so the tag goes too (Undo brings it back) */
+    const ny=+(nr.ny+dy).toFixed(1),pi=nr.npi;
+    if(pi===from&&Math.abs(ny-sh.y)<.4)return;
+    liveShape(sh);
+    if(pi!==from){S.pdf.pages[from].shapes=S.pdf.pages[from].shapes.filter(x=>x!==sh);(S.pdf.pages[pi].shapes=S.pdf.pages[pi].shapes||[]).push(sh);crossed=true}
+    sh.y=ny;paintShape(sh);
+  });
+  return crossed;
+}
+function snapPdf(){ /* call before any change: remembers the state so Undo can return to it */
+  try{pendingAtt=attachShapes()}catch(e){pendingAtt=null}
+  pundo.push(capPdf());predo=[];
+  if(pundo.length>40)pundo.shift();syncUndo();
+}
+function applyPdf(u){
+  const d=JSON.parse(u.j);
   S.pdf.pages=d.p.map((p,i)=>({...p,bg:u.bg[i]}));S.pdf.frames=d.fr;S.pdf.mult=d.mult;syncUndo();renderPdf();
 }
-function syncUndo(){const b=$('#b-pundo');if(b)b.disabled=!pundo.length}
+function undoPdf(){const u=pundo.pop();if(!u){toast('Nothing to undo.');return}predo.push(capPdf());applyPdf(u)}
+function redoPdf(){const u=predo.pop();if(!u){toast('Nothing to redo.');return}pundo.push(capPdf());applyPdf(u)}
+function syncUndo(){const b=$('#b-pundo'),r=$('#b-predo');if(b)b.disabled=!pundo.length;if(r)r.disabled=!predo.length}
+/* typing is saved as one undo step per burst, so Undo reverses a sentence and not a single letter */
+let lastTypeSnap=0,lastTypeBox=null;
+function typingSnap(id){const t=Date.now();if(id!==lastTypeBox||t-lastTypeSnap>1200){snapPdf();lastTypeBox=id}lastTypeSnap=t}
+/* Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y) use this undo while a PDF is open, not the browser's */
+document.addEventListener('keydown',e=>{
+  if(S.mode!=='pdf'||!(e.ctrlKey||e.metaKey)||e.altKey)return;
+  const k=e.key.toLowerCase();if(k!=='z'&&k!=='y')return;
+  if(e.target.closest&&e.target.closest('input,select,textarea'))return;
+  e.preventDefault();(k==='y'||e.shiftKey)?redoPdf():undoPdf();
+});
 function blankPage(h){
   const c=document.createElement('canvas');c.width=1588;c.height=Math.round(h*2);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
   return{h,bg:c.toDataURL('image/jpeg',.6),boxes:[],covers:[],auto:true};
 }
 /* ---- the one layout routine: assign every row of every column a position, in order, with uniform spacing ---- */
 function reflow(model,structural){
+  const att=pendingAtt||attachShapes();pendingAtt=null;
   const fm=model.fm,sp=S.pdf.sp,mu=S.pdf.mult,all=[];
   const mult=c=>({line:mu.line,item:mu.item,entry:mu.entry,sec:mu.sec,head:mu.item}[c]||1);
   model.cols.forEach(col=>{
@@ -910,7 +963,7 @@ function reflow(model,structural){
     /* remember the spacing now in force between neighbours so later layout keeps it */
     if(!r.same){r.lead.d0=r.base}
   });
-  all.forEach((r,i)=>{});
+  if(moveShapes(att,all))structural=true;
   model.cols.forEach(col=>{const rows=col.secs.flatMap(secRows);rows.forEach((r,i)=>{r.lead.pv=i?rows[i-1].lead.id:null;if(!i)r.lead.d0=null})});
   while(pages.length>1&&pages[pages.length-1].auto&&!pages[pages.length-1].boxes.length){pages.pop();structural=true}
   S.pdf.frames=pages.map(()=>({...fm.fr[0]}));
@@ -943,11 +996,11 @@ function moveEntry(id,dir){
 }
 function deleteEntry(id){
   const m=pdfModel(),f=findEntry(m,id);if(!f)return;
-  snapPdf();dropBoxes(f.ent.rows);f.sec.entries.splice(f.sec.entries.indexOf(f.ent),1);reflow(m,true);toast('Entry deleted. Use Undo layout change to bring it back.',4500);
+  snapPdf();dropBoxes(f.ent.rows);f.sec.entries.splice(f.sec.entries.indexOf(f.ent),1);reflow(m,true);toast('Entry deleted. Use Undo (Ctrl or Cmd+Z) to bring it back.',4500);
 }
 function deleteSection(id){
   const m=pdfModel(),f=findSec(m,id);if(!f)return;
-  snapPdf();dropBoxes(secRows(f.sec));f.col.secs.splice(f.col.secs.indexOf(f.sec),1);reflow(m,true);toast('Section deleted. Use Undo layout change to bring it back.',4500);
+  snapPdf();dropBoxes(secRows(f.sec));f.col.secs.splice(f.col.secs.indexOf(f.sec),1);reflow(m,true);toast('Section deleted. Use Undo (Ctrl or Cmd+Z) to bring it back.',4500);
 }
 function deleteLine(id){
   const m=pdfModel();let hit=null;
@@ -1030,7 +1083,7 @@ $('#pdfsecs').addEventListener('click',e=>{
   r.addEventListener('input',()=>{S.pdf.mult[k]=r.value/100;$('#so-'+k).textContent=r.value+'%';reflow(pdfModel())});
 });
 $('#b-sp-reset').onclick=()=>{snapPdf();S.pdf.mult={line:1,item:1,entry:1,sec:1};reflow(pdfModel())};
-$('#b-pundo').onclick=undoPdf;
+$('#b-pundo').onclick=undoPdf;$('#b-predo').onclick=redoPdf;
 /* drag a whole section by the ⇕ handle on its heading */
 pdfwrap.addEventListener('pointerdown',e=>{
   const g=e.target.closest('.sgrip');if(!g)return;e.preventDefault();e.stopPropagation();
@@ -1049,6 +1102,124 @@ pdfwrap.addEventListener('pointerdown',e=>{
   const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);if(line)line.remove();moveSectionTo(m,sec,target)};
   document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
 });
+/* ---------- bullets and pasting ----------
+   Enter at a bullet adds a new bullet below it in the same format (glyph, indent, font, gap).
+   Pasted text that is wider than the page's text area is cut at a word and continues on new lines that
+   share the bullet's text indent and line gap; extra pasted paragraphs become new bullets. */
+const isGlyph=b=>/^[•·▪●◦■‣\-–]$/.test(boxText(b));
+const cloneBox=(b,html)=>{const c={...b,id:uid(),html,o:null,live:true,hd:false,ent:false,d0:null,pv:null};delete c.w;return c};
+function makeRow(ref,textBox,html,glyphRow,gc){
+  const boxes=[];
+  if(glyphRow){const g=glyphRow.boxes.find(isGlyph);if(g)boxes.push(cloneBox(g,g.html))}
+  boxes.push(cloneBox(textBox,html));boxes.sort((a,b)=>a.x-b.x);boxes[0].gc=gc;
+  return{pi:ref.pi,y:ref.y,fs:ref.fs,boxes,lead:boxes[0],x:boxes[0].x,h:ref.h,f:ref.f,col:ref.col,isNew:true};
+}
+function locateBox(m,id){
+  for(let ci=0;ci<m.cols.length;ci++){const f=m.cols[ci].secs.flatMap(secRows),i=f.findIndex(r=>r.boxes.some(b=>b.id===id));
+    if(i>=0)return{ci,f,i,row:f[i],box:f[i].boxes.find(b=>b.id===id)}}
+  return null;
+}
+/* the bullet a line belongs to: its first line (the one with the glyph) through its last wrapped line */
+function bulletItem(f,i){
+  const bul=r=>r.boxes.some(isGlyph),plain=r=>!r.lead.hd&&!r.lead.ent;
+  let s=i;
+  if(!bul(f[i])){
+    let k=i;while(k>0&&i-k<12&&!bul(f[k])&&plain(f[k]))k--;
+    if(bul(f[k])&&plain(f[k])&&f.slice(k+1,i+1).every(r=>plain(r)&&!bul(r)&&r.lead.x>f[k].lead.x+2))s=k;else return{s:i,e:i,bullet:false};
+  }else if(!plain(f[i]))return{s:i,e:i,bullet:false};
+  let e=s;
+  while(e+1<f.length&&plain(f[e+1])&&!bul(f[e+1])&&f[e+1].lead.x>f[s].lead.x+2&&f[e+1].lead.gc==='line')e++;
+  return{s,e,bullet:true};
+}
+function caretSplit(el){ /* the formatted text before and after the caret (or the selection), without touching the box */
+  const s=getSelection();
+  if(!s.rangeCount||!el.contains(s.anchorNode))return{head:el.innerHTML,tail:''};
+  const r=s.getRangeAt(0),h=document.createRange(),t=document.createRange();
+  h.selectNodeContents(el);h.setEnd(r.startContainer,r.startOffset);t.selectNodeContents(el);t.setStart(r.endContainer,r.endOffset);
+  const f=rg=>{const d=document.createElement('div');d.append(rg.cloneContents());return d.innerHTML};
+  return{head:f(h),tail:f(t)};
+}
+function focusAt(bid,end){
+  setTimeout(()=>{const el=pdfwrap.querySelector(`.tbw[data-id="${bid}"] .tbx`);if(!el)return;
+    el.focus();const r=document.createRange();r.selectNodeContents(el);r.collapse(!end);const s=getSelection();s.removeAllRanges();s.addRange(r);
+    el.scrollIntoView({block:'nearest'})},40);
+}
+const rightEdge=()=>{const o=allBoxes().filter(b=>b.oy!=null&&b.ox!=null&&b.w>0);return o.length?Math.max(...o.map(b=>b.ox+b.w)):740};
+const textBoxOf=r=>r.boxes.find(b=>!isGlyph(b))||r.boxes[0];
+/* the char index k (counted across text nodes) as a DOM position */
+function pointAt(el,k){
+  const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let n,acc=0,last=null;
+  while((n=w.nextNode())){last=n;const l=n.nodeValue.length;if(k<=acc+l)return[n,k-acc];acc+=l}
+  return last?[last,last.nodeValue.length]:[el,0];
+}
+/* cut formatted text into lines no wider than W px, breaking at spaces and keeping bold/italic spans */
+function wrapHtml(b,html,W){
+  const pg=pdfwrap.querySelector('.pdfpage'),t=document.createElement('div');
+  t.className='tbw no-export';t.style.cssText='visibility:hidden;left:0;top:0';
+  t.innerHTML=`<div class="tbx" style="${boxFont(b)}"></div>`;pg.append(t);
+  const el=t.firstChild,s=scaleNow(),out=[],L=()=>el.getBoundingClientRect().left;
+  try{
+    let rest=html;
+    for(let guard=0;guard<80;guard++){
+      el.innerHTML=rest;
+      const total=el.textContent.length;
+      if(!el.textContent.trim()||el.getBoundingClientRect().width/s<=W+.5){out.push(rest);break}
+      let lo=1,hi=total;
+      while(lo<hi){const mid=(lo+hi+1)>>1,[n,o]=pointAt(el,mid),r=document.createRange();r.setStart(el,0);r.setEnd(n,o);
+        if((r.getBoundingClientRect().right-L())/s<=W)lo=mid;else hi=mid-1}
+      let cut=el.textContent.lastIndexOf(' ',lo);if(cut<=0)cut=lo;
+      const [n,o]=pointAt(el,cut),r=document.createRange();r.setStart(n,o);r.setEnd(el,el.childNodes.length);
+      const frag=r.extractContents(),d=document.createElement('div');d.append(frag);
+      out.push(el.innerHTML);
+      const w=document.createTreeWalker(d,NodeFilter.SHOW_TEXT),first=w.nextNode();if(first)first.nodeValue=first.nodeValue.replace(/^[\s ]+/,'');
+      rest=d.innerHTML;
+      if(!d.textContent.trim())break;
+    }
+  }finally{t.remove()}
+  return out;
+}
+function commitRows(m,ci,f){m.cols[ci].secs=buildSecs(f,ci);reflow(m,true)}
+function enterIn(el){
+  const id=el.closest('.tbw').dataset.id,m=pdfModel(),L=locateBox(m,id);if(!L)return;
+  const {ci,f,i,row,box}=L,it=bulletItem(f,i),start=f[it.s];
+  snapPdf();
+  const sel0=getSelection();if(sel0.rangeCount&&!sel0.isCollapsed&&el.contains(sel0.anchorNode))sel0.getRangeAt(0).deleteContents();
+  const {head,tail}=caretSplit(el);
+  box.html=head||'<br>';setLive(id,true);
+  const tb=it.bullet?textBoxOf(start):box;
+  const nr=makeRow(start,tb,tail||'<br>',it.bullet?start:null,(it.bullet?start.lead.gc:row.lead.gc)||'line');
+  f.splice(it.e+1,0,nr);commitRows(m,ci,f);
+  focusAt(nr.boxes.find(b=>!isGlyph(b)).id,false);
+}
+function removeEmptyLine(el){
+  const id=el.closest('.tbw').dataset.id,m=pdfModel(),L=locateBox(m,id);if(!L)return;
+  const {ci,f,i,row}=L;if(f.length<2)return;
+  snapPdf();dropBoxes([row]);f.splice(i,1);
+  const prev=f[Math.max(0,i-1)];commitRows(m,ci,f);
+  focusAt(textBoxOf(prev).id,true);
+}
+function pasteText(el,text){
+  const paras=text.replace(/\r/g,'').split(/\n+/).map(s=>s.replace(/^\s*[•·▪●◦■‣*\-–]\s+/,'').replace(/\s+/g,' ').trim()).filter(Boolean);
+  if(!paras.length)return;
+  const id=el.closest('.tbw').dataset.id,m=pdfModel(),L=locateBox(m,id);if(!L)return;
+  const {ci,f,i,row,box}=L,{head,tail}=caretSplit(el),W=rightEdge()-box.x;
+  const lines=paras.map((p,k)=>wrapHtml(box,(k===0?head:'')+esc(p)+(k===paras.length-1?tail:''),W));
+  lastTypeBox=id;lastTypeSnap=Date.now();snapPdf();
+  if(lines.length===1&&lines[0].length===1){document.execCommand('insertText',false,paras[0]);return}
+  const it=bulletItem(f,i),start=f[it.s],tb=it.bullet?textBoxOf(start):box;
+  box.html=lines[0][0];setLive(id,true);
+  const cont=lines[0].slice(1).map(h=>makeRow(row,box,h,null,'line'));
+  f.splice(i+1,0,...cont);
+  const adds=[];
+  lines.slice(1).forEach(ls=>{
+    adds.push(makeRow(start,tb,ls[0],it.bullet?start:null,(it.bullet?start.lead.gc:row.lead.gc)||'line'));
+    ls.slice(1).forEach(h=>adds.push(makeRow(start,tb,h,null,'line')));
+  });
+  f.splice(it.e+cont.length+1,0,...adds);
+  const last=adds.length?adds[adds.length-1]:cont[cont.length-1];
+  commitRows(m,ci,f);focusAt(textBoxOf(last).id,true);
+  toast(`Pasted over ${adds.length+cont.length+1} lines in the same format.`,3000);
+}
 /* ---------- multi-select: pick lines (click a handle, shift-click, or drag a box round them) and move them together ----------
    The picked lines keep the gaps between each other; everything else re-flows around the new position. */
 const sel=new Set(); /* ids of every box on a selected line */
@@ -1093,7 +1264,7 @@ function deleteSel(){
   snapPdf();dropBoxes(rows);
   const gone=new Set(rows);
   m.cols.forEach((c,i)=>{const fl=c.secs.flatMap(secRows).filter(r=>!gone.has(r));if(fl.length)fl[0].f=Math.min(...fl.map(r=>r.f));c.secs=buildSecs(fl,i)});
-  sel.clear();reflow(m,true);toast(rows.length+' lines deleted. Use Undo layout change to bring them back.',4500);
+  sel.clear();reflow(m,true);toast(rows.length+' lines deleted. Use Undo (Ctrl or Cmd+Z) to bring them back.',4500);
 }
 $('#sel-up').onclick=()=>moveSelBy(-1);$('#sel-down').onclick=()=>moveSelBy(1);
 $('#sel-del').onclick=deleteSel;$('#sel-clear').onclick=clearSel;
